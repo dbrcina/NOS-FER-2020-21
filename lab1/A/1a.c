@@ -20,7 +20,6 @@
 #define LB_Z 100
 #define UB_Z 2000
 #define MAX_CARS_SAME_DIR 3
-#define NUM_OF_REQUESTS_FOR_PASS 3
 
 // read+write for user
 #define MSG_QUEUE_PERMS 00600
@@ -28,6 +27,12 @@
 #define MSG_WAIT "Čekam"
 #define MSG_PASS "Prijeđi"
 #define MSG_PASSED "Prešao"
+
+struct node {
+    int key;
+    int data;
+    struct node *next;
+};
 
 int msg_queue_id;
 
@@ -55,7 +60,7 @@ void change_direction(int *direction) {
     *direction = 1 - *direction;
 }
 
-void semaphore_procedure(int n) {
+void semaphore_procedure() {
     // Map SIGINT signal for termination.
     if (signal(SIGINT, SIG_DFL) == SIG_ERR) {
         perror("[SEMAPHORE] signal");
@@ -63,43 +68,58 @@ void semaphore_procedure(int n) {
     }
     struct msg_buffer buf;
     int current_direction = generate_random_integer(0, 1);
-    int counter = 0;
-    bool permissions[n];
+    int direction_counter = 0;
+    struct node *head = NULL;
+    struct node *last = NULL;
     while (1) {
         // Receive a message from car.
         if (msgrcv(msg_queue_id, (struct msg_buffer *)&buf, MSG_TEXT_SIZE, 0, 0) == -1) {
             perror("[SEMAPHORE] msgrcv");
             exit(EXIT_FAILURE);
         }
-        // Add current car data into linked list.
-        llist_add(buf.msg_type, buf.car_direction);
+
+        // Cache current car's data.
+        struct node *el = (struct node *)malloc(sizeof(struct node));
+        el->key = buf.msg_type;
+        el->data = buf.car_direction;
+        if (head == NULL) {
+            head = last = el;
+        } else {
+            last->next = el;
+            last = el;
+        }
+
         // Increment counter if current car's direction is equal to semaphore's.
         if (buf.car_direction == current_direction) {
-            counter++;
+            direction_counter++;
         }
+
         // If counter reached maximum number of requests for current direction.
-        if (counter == NUM_OF_REQUESTS_FOR_PASS) {
-            while (1) {
-                // Delete and retrieve first element from list.
-                // If element satisfies the conditions, invoke msgsnd method,
-                // otherwise insert element at the same position.
-                struct node *el = llist_delete_first();
-                if (el->data == current_direction) {
-                    strcpy(buf.msg_text, MSG_PASS);
-                    buf.msg_type = el->key;
-                    buf.car_direction = current_direction;
-                    if (msgsnd(msg_queue_id, (struct msg_buffer *)&buf, MSG_TEXT_SIZE, 0) == -1) {
+        if (direction_counter == MAX_CARS_SAME_DIR) {
+            int i = 0;
+            int reg_numbers[MAX_CARS_SAME_DIR];
+            struct node *current = head;
+            while (direction_counter--) {
+                if (current->data == current_direction) {
+                    reg_numbers[i++] = current->key;
+                }
+                struct node *temp = current;
+                current = current->next;
+                if (temp == head) {
+                    head = current;
+                } else if (temp->next == last) {
+                    last = current;
+                }
+                free(temp);
+            }
+            strcpy(buf.msg_text, MSG_PASS);
+            buf.car_direction = current_direction;
+            for (i = 0; i < MAX_CARS_SAME_DIR; i++) {
+                buf.msg_type = reg_numbers[i];
+                if (msgsnd(msg_queue_id, (struct msg_buffer *)&buf, MSG_TEXT_SIZE, 0) == -1) {
                         perror("[SEMAPHORE] msgsnd");
                         exit(EXIT_FAILURE);
                     }
-                    counter--;
-                } else {
-                    llist_add(el->key, el->data);
-                }
-                free(el);
-                if (counter == 0) {
-                    break;
-                }
             }
         }
     }
@@ -124,24 +144,18 @@ void car_procedure(int reg_number, int direction) {
             exit(EXIT_FAILURE);
         }
         printf("Automobil %d smjera %d čeka na prelazak preko mosta!\n", reg_number, buf.car_direction);
-        // Receive pass message.
-        if (msgrcv(msg_queue_id, (struct msg_buffer *)&buf, MSG_TEXT_SIZE, buf.msg_type, 0) == -1) {
-            perror("[CAR] msgrcv");
-            exit(EXIT_FAILURE);
-        }
-        if (strcmp(buf.msg_text, MSG_PASS) == 0) {
-            printf("Automobil %d smjera %d se popeo na most!\n", reg_number, buf.car_direction);
-        }
-        // Recieve passed message.
-        if (msgrcv(msg_queue_id, (struct msg_buffer *)&buf, MSG_TEXT_SIZE, buf.msg_type, 0) == -1) {
-            perror("[CAR] msgrcv");
-            exit(EXIT_FAILURE);
-        }
-        if (strcmp(buf.msg_text, MSG_PASSED) == 0) {
-            printf("Automobil %d smjera %d je prešao most!\n", reg_number, buf.car_direction);
-        }
-        // Change car direction.
-        change_direction(&buf.car_direction);
+        // // Receive pass/passed message.
+        // if (msgrcv(msg_queue_id, (struct msg_buffer *)&buf, MSG_TEXT_SIZE, buf.msg_type, 0) == -1) {
+        //     perror("[CAR] msgrcv");
+        //     exit(EXIT_FAILURE);
+        // }
+        // if (strcmp(buf.msg_text, MSG_PASS) == 0) {
+        //     printf("Automobil %d smjera %d se popeo na most!\n", reg_number, buf.car_direction);
+        // } else if (strcmp(buf.msg_text, MSG_PASSED) == 0) {
+        //     printf("Automobil %d smjera %d je prešao most!\n", reg_number, buf.car_direction);
+        // }
+        // // // Change car direction.
+        // // change_direction(&buf.car_direction);
     }
 }
 
@@ -175,7 +189,7 @@ int main(int argc, char const *argv[]) {
     // Create semaphore process.
     switch (fork()) {
         case 0:
-            semaphore_procedure(n);
+            semaphore_procedure();
         case -1:
             perror("[MAIN] fork semaphore");
             return EXIT_FAILURE;
