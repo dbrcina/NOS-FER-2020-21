@@ -4,10 +4,12 @@
 #include <sys/types.h>
 #include <sys/msg.h>
 #include <sys/ipc.h>
+#include <sys/wait.h>
 #include <errno.h>
 #include <signal.h>
 #include <time.h>
 #include <string.h>
+#include <stdbool.h>
 
 #define LB_CARS 5
 #define UB_CARS 100
@@ -23,12 +25,16 @@
 // read+write for user
 #define MSG_QUEUE_PERMS 00600
 #define MSG_TEXT_SIZE 10
+#define MSG_WAIT "Čekam"
+#define MSG_PASS "Prijeđi"
+#define MSG_PASSED "Prešao"
 
 int msg_queue_id;
 
 struct msg_buffer {
     long msg_type;
     char msg_text[MSG_TEXT_SIZE];
+    int car_direction;
 };
 
 // Releases the message queue.
@@ -38,7 +44,6 @@ void release_msg_queue(int signal) {
         perror("[MAIN] msgctl");
         exit(EXIT_FAILURE);
     }
-    exit(EXIT_SUCCESS);
 }
 
 // Generates random integer from [lb, ub] interval.
@@ -46,24 +51,58 @@ int generate_random_integer(int lb, int ub) {
     return lb + rand() % (ub - lb + 1);
 }
 
-void semaphore_procedure() {
+void change_direction(int *direction) {
+    *direction = 1 - *direction;
+}
+
+void semaphore_procedure(int n) {
     // Map SIGINT signal for termination.
     if (signal(SIGINT, SIG_DFL) == SIG_ERR) {
         perror("[SEMAPHORE] signal");
         exit(EXIT_FAILURE);
     }
     struct msg_buffer buf;
-    while(1) {
+    int current_direction = generate_random_integer(0, 1);
+    int counter = 0;
+    bool permissions[n];
+    while (1) {
+        // Receive a message from car.
         if (msgrcv(msg_queue_id, (struct msg_buffer *)&buf, MSG_TEXT_SIZE, 0, 0) == -1) {
             perror("[SEMAPHORE] msgrcv");
             exit(EXIT_FAILURE);
         }
-        printf("[CAR %ld]: %s\n", buf.msg_type, buf.msg_text);
+        // Add current car data into linked list.
+        llist_add(buf.msg_type, buf.car_direction);
+        // Increment counter if current car's direction is equal to semaphore's.
+        if (buf.car_direction == current_direction) {
+            counter++;
+        }
+        // If counter reached maximum number of requests for current direction.
+        if (counter == NUM_OF_REQUESTS_FOR_PASS) {
+            while (1) {
+                // Delete and retrieve first element from list.
+                // If element satisfies the conditions, invoke msgsnd method,
+                // otherwise insert element at the same position.
+                struct node *el = llist_delete_first();
+                if (el->data == current_direction) {
+                    strcpy(buf.msg_text, MSG_PASS);
+                    buf.msg_type = el->key;
+                    buf.car_direction = current_direction;
+                    if (msgsnd(msg_queue_id, (struct msg_buffer *)&buf, MSG_TEXT_SIZE, 0) == -1) {
+                        perror("[SEMAPHORE] msgsnd");
+                        exit(EXIT_FAILURE);
+                    }
+                    counter--;
+                } else {
+                    llist_add(el->key, el->data);
+                }
+                free(el);
+                if (counter == 0) {
+                    break;
+                }
+            }
+        }
     }
-}
-
-void change_direction(int *direction) {
-    *direction = 1 - *direction;
 }
 
 void car_procedure(int reg_number, int direction) {
@@ -74,87 +113,93 @@ void car_procedure(int reg_number, int direction) {
     }
     struct msg_buffer buf;
     buf.msg_type = reg_number;
-    while(1) {
+    buf.car_direction = direction;
+    while (1) {
         // Sleep Z ms
         sleep(generate_random_integer(LB_Z, UB_Z) / 1000);
-        strcpy(buf.msg_text, "Čekam!");
+        strcpy(buf.msg_text, MSG_WAIT);
+        // Send wait message.
         if (msgsnd(msg_queue_id, (struct msg_buffer *)&buf, MSG_TEXT_SIZE, 0) == -1) {
             perror("[CAR] msgsnd");
             exit(EXIT_FAILURE);
         }
-        printf("Automobil %d čeka na prelazak preko mosta!\n", reg_number);
+        printf("Automobil %d smjera %d čeka na prelazak preko mosta!\n", reg_number, buf.car_direction);
+        // Receive pass message.
         if (msgrcv(msg_queue_id, (struct msg_buffer *)&buf, MSG_TEXT_SIZE, buf.msg_type, 0) == -1) {
             perror("[CAR] msgrcv");
             exit(EXIT_FAILURE);
         }
-        if (strcmp(buf.msg_text, "Prijeđi") == 0) {
-            printf("Automobil %d se popeo na most!\n", reg_number);
-            // Sleep Y ms
-            sleep(generate_random_integer(LB_Y, UB_Y) / 1000);
+        if (strcmp(buf.msg_text, MSG_PASS) == 0) {
+            printf("Automobil %d smjera %d se popeo na most!\n", reg_number, buf.car_direction);
         }
+        // Recieve passed message.
         if (msgrcv(msg_queue_id, (struct msg_buffer *)&buf, MSG_TEXT_SIZE, buf.msg_type, 0) == -1) {
             perror("[CAR] msgrcv");
             exit(EXIT_FAILURE);
         }
-        if (strcmp(buf.msg_text, "Prešao") == 0) {
-            printf("Automobil %d je prešao most!\n", reg_number);
+        if (strcmp(buf.msg_text, MSG_PASSED) == 0) {
+            printf("Automobil %d smjera %d je prešao most!\n", reg_number, buf.car_direction);
         }
+        // Change car direction.
+        change_direction(&buf.car_direction);
     }
 }
-
 
 int main(int argc, char const *argv[]) {
     // Parse command line arguments.
     if (argc != 2) {
         printf("Program očekuje broj automobila kao argument!\n");
-        exit(EXIT_FAILURE);
+        return EXIT_FAILURE;
     }
     int n = atoi(argv[1]);
     if (n <= 0 || n < LB_CARS || n > UB_CARS) {
-        printf("Broj automobila mora biti nenegativan broj iz intervala [%d,%d]!\n", LB_CARS, UB_CARS);
-        exit(EXIT_FAILURE);
-    }
-
-    // Prepare registration numbers.
-    int reg_numbers[n];
-    for (int i = 0; i < n; i++) {
-        reg_numbers[i] = i + 1;
+        printf("Broj automobila mora biti nenegativan broj iz intervala [%d, %d]!\n", LB_CARS, UB_CARS);
+        return EXIT_FAILURE;
     }
 
     // Create a message queue.
     if ((msg_queue_id = msgget(getuid(), MSG_QUEUE_PERMS | IPC_CREAT)) == -1) {
         perror("[MAIN] msgget");
-        exit(EXIT_FAILURE);
+        return EXIT_FAILURE;
     }
 
     // Map SIGINT signal for release_msg_queue function.
     if (signal(SIGINT, release_msg_queue) == SIG_ERR) {
         perror("[MAIN] signal");
-        exit(EXIT_FAILURE);
+        return EXIT_FAILURE;
     }
 
     // Set seed for randomness.
     srand((unsigned)time(NULL));
 
     // Create semaphore process.
-    switch(fork()) {
+    switch (fork()) {
         case 0:
-            semaphore_procedure();
-            exit(EXIT_SUCCESS);
+            semaphore_procedure(n);
         case -1:
             perror("[MAIN] fork semaphore");
-            exit(EXIT_FAILURE);
+            return EXIT_FAILURE;
     }
 
-    // Create car processes.
-    switch(fork()) {
-        case 0:
-            car_procedure(1, 0);
-            exit(EXIT_SUCCESS);
-        case -1:
-            perror("[MAIN] fork car");
-            exit(EXIT_FAILURE);
+    // Create n car processes.
+    int i;
+    for (i = 0; i < n; i++) {
+        int reg_number = i + 1;
+        int direction = generate_random_integer(0, 1);
+        switch(fork()) {
+            case 0:
+                car_procedure(reg_number, direction);
+            case -1:
+                perror("[MAIN] fork car");
+                return EXIT_FAILURE;
+        }  
     }
-
-    while(1);
+    // Add one because there are n+1 processes.
+    i++;
+    // Wait for processes to finish.
+    while (i--) {
+       wait(NULL);
+    }
+    printf("Svi procesi su uspješno uništeni kao i red poruka!\n");
+    return EXIT_SUCCESS;
 }
