@@ -71,7 +71,7 @@ int change_direction(int direction) {
 }
 
 // Sleeps for X milliseconds and then invokes SIGUSR1 signal.
-void *semaphore_thread(void *x) {
+void *semaphore_thread(void *ptr) {
     printf("[SEMAPHORE_THREAD] Započinjem spavanje!\n");
     sleep(generate_random_integer(LB_X, UB_X) / 1000);
     printf("[SEMAPHORE_THREAD] Probudila sam se i šaljem signal!\n");
@@ -125,7 +125,7 @@ void semaphore_procedure() {
             exit(EXIT_FAILURE);
         }
 
-        // // Seng MSG_PASS to cars.
+        // Seng MSG_PASS to cars.
         strcpy(buf.msg_text, MSG_PASS);
         for (int i = 0; i < counter; i++) {
             buf.msg_type = MSG_TYPE_PASS(reg_numbers[i]);
