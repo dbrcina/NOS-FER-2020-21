@@ -11,9 +11,14 @@
 #define MIN_PROCESSES 3
 #define MAX_PROCESSES 10
 #define PERMS 00600
+#define BUFFER_SIZE 30
+#define MSG_LENGTH 15
+#define REQUEST "zahtjev"
+#define RESPONSE "odgovor"
 #define LB_X 100
 #define UB_X 2000
 #define REPEAT 5
+#define MAX(x, y)(((x) > (y)) ? (x) : (y))
 
 struct process {
     int id;
@@ -35,9 +40,23 @@ int g_smh_id;
 struct db_entry_database *g_db;
 int *g_pipes; // NxNx2
 
+char g_receive_buffer[BUFFER_SIZE];
+
 /* Calculates memory offset for 3D array of ints. */
 int memory_offset(int i, int j) {
     return i * g_n * 2 + j * 2;
+}
+
+/* Process Pi sends msg to process Pj. */
+void send_message(struct process *proc, int proc_receive_id, const char *msg) {
+    char send_buffer[BUFFER_SIZE];
+    sprintf(send_buffer, "%s(%d,%d)", msg, proc->id, proc->logic_clock);
+    fprintf(stdout, "Proces P%d šalje poruku %s procesu P%d!\n", proc->id, send_buffer, proc_receive_id);
+    int offset = memory_offset(proc->id, proc_receive_id);
+    if (write(g_pipes[offset + Write_Operation], send_buffer, strlen(send_buffer) + 1) == -1) {
+        perror("[PROCESS] write");
+        exit(EXIT_FAILURE);
+    }
 }
 
 /* Process's working procedure. */
@@ -51,7 +70,12 @@ void process_procedure(int id) {
             .id = id,
             .logic_clock = 1
     };
-    fprintf(stdout, "Proces %d šalje poruke!\n", process.id);
+    for (int i = 0; i < g_n; i++) {
+        if (i == process.id) {
+            continue;
+        }
+
+    }
     while (1);
 }
 
@@ -134,22 +158,21 @@ void parse_command_line_arguments(int argc, char const *argv[]) {
 }
 
 int main(int argc, char const *argv[]) {
-    g_pipes = malloc(sizeof(int));
     parse_command_line_arguments(argc, argv);
     prepare_database();
     register_signals();
     prepare_pipelines();
 
     // Create N processes.
-    for (int i = 0; i < g_n; i++) {
-        pid_t pid = fork();
-        if (pid == -1) {
-            perror("[MAIN] fork");
-            return EXIT_FAILURE;
-        } else if (pid == 0) {
-            process_procedure(i);
-        }
-    }
+//    for (int i = 0; i < g_n; i++) {
+//        pid_t pid = fork();
+//        if (pid == -1) {
+//            perror("[MAIN] fork");
+//            return EXIT_FAILURE;
+//        } else if (pid == 0) {
+//            process_procedure(i);
+//        }
+//    }
 
     while (1);
 }
