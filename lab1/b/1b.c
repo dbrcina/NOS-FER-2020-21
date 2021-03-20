@@ -4,6 +4,7 @@
 #include <limits.h>
 #include <unistd.h>
 #include <signal.h>
+#include <string.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
 
@@ -14,43 +15,100 @@
 #define UB_X 2000
 #define REPEAT 5
 
-struct db_entry_database {
+struct process {
     int id;
     int logic_clock;
+};
+
+struct db_entry_database {
+    struct process process_data;
     int entries;
 };
 
-long int N;
-int SHM_ID;
-struct db_entry_database *DB;
+enum pipe_operation {
+    Read_Operation = 0,
+    Write_Operation = 1
+};
+
+long int g_n;
+int g_smh_id;
+struct db_entry_database *g_db;
+int *g_pipes; // NxNx2
+
+/* Calculates memory offset for 3D array of ints. */
+int memory_offset(int i, int j) {
+    return i * g_n * 2 + j * 2;
+}
+
+/* Process's working procedure. */
+void process_procedure(int id) {
+    // Map SIGINT to its default behaviour.
+    if (signal(SIGINT, SIG_DFL) == SIG_ERR) {
+        perror("[PROCESS] signal");
+        exit(EXIT_FAILURE);
+    }
+    struct process process = {
+            .id = id,
+            .logic_clock = 1
+    };
+    fprintf(stdout, "Proces %d šalje poruke!\n", process.id);
+    while (1);
+}
+
+/* Creates NxNx2 array of ints. Every two processes have two pipelines open. */
+void prepare_pipelines() {
+    g_pipes = (int *) malloc(g_n * g_n * 2 * sizeof(int));
+    for (int i = 0; i < g_n; i++) {
+        for (int j = 0; j < g_n; j++) {
+            if (i == j) {
+                continue;
+            }
+            int offset = memory_offset(i, j);
+            int fd[2];
+            if (pipe(fd) == -1) {
+                perror("[MAIN] pipe");
+                exit(EXIT_FAILURE);
+            }
+            g_pipes[offset + Read_Operation] = fd[Read_Operation];
+            g_pipes[offset + Write_Operation] = fd[Write_Operation];
+        }
+    }
+}
 
 /* First detaches memory with shmdt function, and then removes SHM_ID with shmctl function. */
 void free_memory(int signal) {
     fprintf(stdout, "\n");
-    if (shmdt(DB) == -1) {
+    if (shmdt((struct db_entry_database *) g_db) == -1) {
         perror("[MAIN] shmdt");
         exit(EXIT_FAILURE);
     }
-    fprintf(stdout, "Memorija vezana za segment shmid=%d je uspješno očišćena!\n", SHM_ID);
-    if (shmctl(SHM_ID, IPC_RMID, NULL) == -1) {
+    fprintf(stdout, "Memorija vezana za segment shmid=%d je uspješno očišćena!\n", g_smh_id);
+    if (shmctl(g_smh_id, IPC_RMID, NULL) == -1) {
         perror("[MAIN] shmctl");
         exit(EXIT_FAILURE);
     }
-    fprintf(stdout, "Segment shmid=%d je uspješno uništen!\n", SHM_ID);
-    // If this function was invoked by some kind of signal...
-    if (signal > 0) {
-        exit(EXIT_SUCCESS);
+    fprintf(stdout, "Segment shmid=%d je uspješno uništen!\n", g_smh_id);
+    free(g_pipes);
+    fprintf(stdout, "Memorija za cjevovode je očišćena!\n");
+    exit(EXIT_SUCCESS);
+}
+
+/* Registers signals for main program. */
+void register_signals() {
+    if (signal(SIGINT, free_memory) == SIG_ERR) {
+        perror("[MAIN] signal");
+        exit(EXIT_FAILURE);
     }
 }
 
 /* Prepares database using shared memory segment. */
 void prepare_database() {
-    if ((SHM_ID = shmget(getuid(), sizeof(struct db_entry_database) * N, IPC_CREAT | PERMS)) == -1) {
+    if ((g_smh_id = shmget(getuid(), sizeof(struct db_entry_database) * g_n, IPC_CREAT | PERMS)) == -1) {
         perror("[MAIN] shmget");
         exit(EXIT_FAILURE);
     }
-    DB = (struct db_entry_database *) shmat(SHM_ID, NULL, 0);
-    if (*((int *) DB) == -1) {
+    g_db = (struct db_entry_database *) shmat(g_smh_id, NULL, 0);
+    if (*((int *) g_db) == -1) {
         perror("[MAIN] shmat");
         exit(EXIT_FAILURE);
     }
@@ -64,25 +122,34 @@ void parse_command_line_arguments(int argc, char const *argv[]) {
     }
     char *endptr;
     errno = 0;
-    N = strtol(argv[1], &endptr, 10);
-    if ((errno == ERANGE && (N == LONG_MAX || N == LONG_MIN)) || (errno != 0 && N == 0)) {
-        perror("strtol");
+    g_n = strtol(argv[1], &endptr, 10);
+    if ((errno == ERANGE && (g_n == LONG_MAX || g_n == LONG_MIN)) || (errno != 0 && g_n == 0)) {
+        perror("[MAIN] strtol");
         exit(EXIT_FAILURE);
     }
-    if (*endptr != '\0' || endptr == argv[1] || N < MIN_PROCESSES || N > MAX_PROCESSES) {
+    if (*endptr != '\0' || endptr == argv[1] || g_n < MIN_PROCESSES || g_n > MAX_PROCESSES) {
         fprintf(stderr, "Program očekuje nenegativan broj iz intervala [%d, %d]!\n", MIN_PROCESSES, MAX_PROCESSES);
         exit(EXIT_FAILURE);
     }
 }
 
 int main(int argc, char const *argv[]) {
+    g_pipes = malloc(sizeof(int));
     parse_command_line_arguments(argc, argv);
     prepare_database();
-    if (signal(SIGINT, free_memory) == SIG_ERR) {
-        perror("[MAIN] signal");
-        return EXIT_FAILURE;
+    register_signals();
+    prepare_pipelines();
+
+    // Create N processes.
+    for (int i = 0; i < g_n; i++) {
+        pid_t pid = fork();
+        if (pid == -1) {
+            perror("[MAIN] fork");
+            return EXIT_FAILURE;
+        } else if (pid == 0) {
+            process_procedure(i);
+        }
     }
+
     while (1);
-    free_memory(-1);
-    return EXIT_SUCCESS;
 }
