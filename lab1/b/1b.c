@@ -81,6 +81,7 @@ void receive_requests_responses(struct process *proc) {
     int responses_counter = 0;
     int id = proc->id;
     struct msg_buf buf;
+    int current_l_clock = proc->l_clock;
     while (1) {
         if (read(g_pipes[id * 2 + Read_Operation], &buf, sizeof(buf)) == -1) {
             perror("[PROCESS] receive_requests_responses::read");
@@ -93,8 +94,8 @@ void receive_requests_responses(struct process *proc) {
         if (buf.type == Request) {
             char resp_msg[40];
             if (!g_enter_cs
-                || proc->l_clock > msg_l_clock
-                || (proc->l_clock == msg_l_clock && id > msg_id)) {
+                || current_l_clock > msg_l_clock
+                || (current_l_clock == msg_l_clock && id > msg_id)) {
                 send_response(proc, &msg_proc);
                 sprintf(resp_msg, " te šalje ODGOVOR(%d,%d) prema P%d!", id, msg_l_clock, msg_id);
             } else { // Don't send response, save it!
@@ -108,7 +109,7 @@ void receive_requests_responses(struct process *proc) {
         } else { // Response
             responses_counter++;
             fprintf(stdout,
-                    "P%d prima ODGOVOR(%d,%d) od P%d i ažurira lokalni sat c%d=max(%d,%d)+1=%d, odgovori:%d!\n",
+                    "P%d prima ODGOVOR(%d,%d) od P%d i ažurira lokalni sat c%d=max(%d,%d)+1=%d, ODGOVORI:%d!\n",
                     id, msg_id, msg_l_clock, msg_id, id, proc->l_clock, msg_l_clock, new_l_clock, responses_counter
             );
         }
@@ -119,6 +120,7 @@ void receive_requests_responses(struct process *proc) {
 
 /* Send request messages to other processes. */
 void send_requests(const struct process *proc) {
+    if (!g_enter_cs) return;
     struct msg_buf buf = {
             .type = Request,
             .proc = *proc
@@ -166,6 +168,7 @@ _Noreturn void process_procedure(int id) {
         sleep(1);
         receive_requests_responses(&proc);
         sleep(1);
+        sleep(10);
         critical_section(&proc);
         send_remaining_responses(&proc);
         sleep(1);
