@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include <string.h>
+#include <time.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
 
@@ -45,17 +46,8 @@ struct db_entry_database {
 long int g_n;
 int g_smh_id;
 struct db_entry_database *g_db;
-int *g_pipes; // Nx(N-1)x2
-
-/*
- * Calculates memory offset for 3D array of ints.
- * If j > i, then j = j - 1, because we don't want same processes in memory.
- * So, [0][0] means a connection between P0-P1 and not P0-P0, [1][1] P1-P2 and so on...
- * i==j will never occur in this program.
- */
-int memory_offset(int i, int j) {
-    return i * (g_n - 1) * 2 + (j > i ? j - 1 : j) * 2;
-}
+int *g_pipes; // Nx2
+int g_enter_cs = 1; // if true, process wants to go in critical section.
 
 /* Send request messages to other processes. */
 void send_requests(const struct process *process) {
@@ -67,30 +59,72 @@ void send_requests(const struct process *process) {
     int logic_clock = process->logic_clock;
     for (int i = 0; i < g_n; ++i) {
         if (i == id) continue;
-        if (write(g_pipes[memory_offset(id, i) + Write_Operation], &buf, sizeof(buf)) == -1) {
+        if (write(g_pipes[i * 2 + Write_Operation], &buf, sizeof(buf)) == -1) {
             perror("[PROCESS] send_requests::write");
             exit(EXIT_FAILURE);
         }
-        fprintf(stdout, "Proces P%d šalje zahtjev(%d,%d) procesu P%d!\n", id, id, logic_clock, i);
+        fprintf(stdout,
+                "P%d, čiji je lokalni logički sat c%d=%d, šalje zahtjev(%d,%d) prema P%d!\n",
+                id, id, logic_clock, id, logic_clock, i
+        );
     }
 }
 
-/* Receive request messages from other processes. */
-void receive_requests(const struct process *process) {
+/* Send response message to other process. */
+void send_response(const struct process *process, const struct process *other_process) {
     int id = process->id;
-    int logic_clock = process->logic_clock;
+    int other_process_id = other_process->id;
+    int other_logic_clock = other_process->logic_clock;
+    struct msg_buf buf = {
+            .type = Response,
+            .process = {
+                    .id = id,
+                    .logic_clock = other_process->logic_clock
+            }
+    };
+    if (write(g_pipes[other_process_id * 2 + Write_Operation], &buf, sizeof(buf)) == -1) {
+        perror("[PROCESS] send_response::write");
+        exit(EXIT_FAILURE);
+    }
+    fprintf(stdout,
+            "P%d šalje odgovor(%d,%d) prema P%d!\n",
+            id, id, other_logic_clock, other_process_id
+    );
+}
+
+/* Receive request/responses messages from other processes and returns an array of processes response. */
+struct process *receive_requests_responses(struct process *process) {
+    struct process *responses = (struct process *) malloc(sizeof(struct process) * (g_n - 1));
+    int responses_counter = 0;
+    int id = process->id;
     struct msg_buf buf;
-    for (int i = 0; i < g_n; ++i) {
-        if (i == id) continue;
-        if (read(g_pipes[memory_offset(i, id) + Read_Operation], &buf, sizeof(buf)) == -1) {
+    while (1) {
+        if (read(g_pipes[id * 2 + Read_Operation], &buf, sizeof(buf)) == -1) {
             perror("[PROCESS] receive_requests::read");
             exit(EXIT_FAILURE);
         }
-        struct process other_process = buf.process;
-        int other_logic_clock = other_process.logic_clock;
-        fprintf(stdout, "Proces P%d prima zahtjev(%d,%d) procesa P%d!\n", id, i, other_logic_clock, i);
-        logic_clock = MAX(logic_clock, other_logic_clock) + 1;
+        struct process msg_process = buf.process;
+        int msg_id = msg_process.id;
+        int msg_logic_clock = msg_process.logic_clock;
+        int logic_clock = process->logic_clock;
+        int new_logic_clock = MAX(logic_clock, msg_logic_clock) + 1;
+        if (buf.type == Request) {
+            char resp_msg[40] = "!";
+            if (!g_enter_cs || logic_clock > msg_logic_clock || (logic_clock == msg_logic_clock && id > msg_id)) {
+                send_response(process, &msg_process);
+                sprintf(resp_msg, " te šalje odgovor(%d,%d) prema P%d!", id, msg_logic_clock, msg_id);
+            }
+            fprintf(stdout,
+                    "P%d prima zahtjev(%d,%d) od P%d i ažurira lokalni logički sat c%d=max(%d,%d)+1=%d%s\n",
+                    id, msg_id, msg_logic_clock, msg_id, id, logic_clock, msg_logic_clock, new_logic_clock, resp_msg
+            );
+        } else { // Response
+
+        }
+        process->logic_clock = new_logic_clock;
+        if (responses_counter == g_n - 1) break;
     }
+    return responses;
 }
 
 /* Process's working procedure. */
@@ -100,45 +134,32 @@ _Noreturn void process_procedure(int id) {
         perror("[PROCESS] process_procedure::signal");
         exit(EXIT_FAILURE);
     }
+    // Initialize randomness.
+    srand((unsigned) time(NULL) ^ getpid());
     // Create process structure.
     struct process process = {
             .id = id,
-            .logic_clock = 1
+            .logic_clock = rand() % g_n
     };
-    // Close read descriptors from current process to others
-    // and close write descriptors to current process from others.
-    for (int i = 0; i < g_n; i++) {
-        if (i == id) continue;
-        if (close(g_pipes[memory_offset(id, i) + Read_Operation]) == -1
-            || close(g_pipes[memory_offset(i, id) + Write_Operation]) == -1) {
-            perror("[PROCESS] process_procedure::close");
-            exit(EXIT_FAILURE);
-        }
-    }
-
     // Do work...
     while (1) {
-
         send_requests(&process);
-        receive_requests(&process);
+        sleep(1);
+        receive_requests_responses(&process);
         sleep(10);
     }
 }
 
-/* Creates Nx(N-1)x2 array of ints. Every two different processes have two pipelines open. */
+/* Creates N pipelines. */
 void prepare_pipelines() {
-    for (int i = 0; i < g_n; i++) {
-        for (int j = 0; j < g_n; j++) {
-            if (i == j) continue;
-            int offset = memory_offset(i, j);
-            int fd[2];
-            if (pipe(fd) == -1) {
-                perror("[MAIN] prepare_pipelines::pipe");
-                exit(EXIT_FAILURE);
-            }
-            g_pipes[offset + Read_Operation] = fd[Read_Operation];
-            g_pipes[offset + Write_Operation] = fd[Write_Operation];
+    for (int i = 0; i < g_n; ++i) {
+        int fd[2];
+        if (pipe(fd) == -1) {
+            perror("[MAIN] prepare_pipelines::pipe");
+            exit(EXIT_FAILURE);
         }
+        g_pipes[i * 2 + Read_Operation] = fd[Read_Operation];
+        g_pipes[i * 2 + Write_Operation] = fd[Write_Operation];
     }
 }
 
@@ -169,7 +190,7 @@ void register_signals() {
 /* Prepares database and pipelines using shared memory segment. */
 void prepare_shared_memory() {
     size_t db_size = g_n * sizeof(struct db_entry_database);
-    size_t pipelines_size = g_n * (g_n - 1) * 2 * sizeof(int);
+    size_t pipelines_size = g_n * 2 * sizeof(int);
     if ((g_smh_id = shmget(getuid(), db_size + pipelines_size, IPC_CREAT | PERMS)) == -1) {
         perror("[MAIN] prepare_shared_memory::shmget");
         exit(EXIT_FAILURE);
@@ -183,7 +204,7 @@ void prepare_shared_memory() {
 }
 
 /* Parses command line arguments and informs with appropriate messages. */
-void parse_command_line_arguments(int argc, char const *argv[]) {
+void parse_command_line_arguments(int argc, const char *argv[]) {
     if (argc != 2) {
         fprintf(stderr, "Program očekuje broj procesa kao argument!\n");
         exit(EXIT_FAILURE);
@@ -201,7 +222,7 @@ void parse_command_line_arguments(int argc, char const *argv[]) {
     }
 }
 
-int main(int argc, char const *argv[]) {
+int main(int argc, const char *argv[]) {
     parse_command_line_arguments(argc, argv);
     prepare_shared_memory();
     register_signals();
