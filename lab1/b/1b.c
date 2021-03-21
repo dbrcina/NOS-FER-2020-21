@@ -30,33 +30,101 @@ enum msg_type {
 
 struct process {
     int id;
-    int logic_clock;
+    int l_clock;
 };
 
 struct msg_buf {
     enum msg_type type;
-    struct process process;
+    struct process proc;
 };
 
 struct db_entry_database {
-    struct process process_data;
+    struct process proc;
     int entries;
 };
+
 
 long int g_n;
 int g_smh_id;
 struct db_entry_database *g_db;
 int *g_pipes; // Nx2
 int g_enter_cs = 1; // if true, process wants to go in critical section.
+int *responses; // g_n-1 size, postponed responses
+
+/* Send response message to other process. */
+void send_response(const struct process *proc, const struct process *other_proc) {
+    struct msg_buf buf = {
+            .type = Response,
+            .proc = {
+                    .id = proc->id,
+                    .l_clock = other_proc->l_clock
+            }
+    };
+    if (write(g_pipes[other_proc->id * 2 + Write_Operation], &buf, sizeof(buf)) == -1) {
+        perror("[PROCESS] send_response::write");
+        exit(EXIT_FAILURE);
+    }
+}
+
+/* Send remaining response messages to waiting processes. */
+void send_remaining_responses(const struct process *proc) {
+
+}
+
+/* Critical section procedure. */
+void critical_section(struct process *proc) {
+
+}
+
+/* Receive request/responses messages from other processes and fills an array of responses that needs to be send. */
+void receive_requests_responses(struct process *proc) {
+    int responses_counter = 0;
+    int id = proc->id;
+    struct msg_buf buf;
+    while (1) {
+        if (read(g_pipes[id * 2 + Read_Operation], &buf, sizeof(buf)) == -1) {
+            perror("[PROCESS] receive_requests_responses::read");
+            exit(EXIT_FAILURE);
+        }
+        struct process msg_proc = buf.proc;
+        int msg_id = msg_proc.id;
+        int msg_l_clock = msg_proc.l_clock;
+        int new_l_clock = MAX(proc->l_clock, msg_l_clock) + 1;
+        if (buf.type == Request) {
+            char resp_msg[40];
+            if (!g_enter_cs
+                || proc->l_clock > msg_l_clock
+                || (proc->l_clock == msg_l_clock && id > msg_id)) {
+                send_response(proc, &msg_proc);
+                sprintf(resp_msg, " te šalje ODGOVOR(%d,%d) prema P%d!", id, msg_l_clock, msg_id);
+            } else { // Don't send response, save it!
+                responses[msg_id] = msg_l_clock;
+                sprintf(resp_msg, " te NE šalje ODGOVOR(%d,%d) prema P%d!", id, msg_l_clock, msg_id);
+            }
+            fprintf(stdout,
+                    "P%d prima ZAHTJEV(%d,%d) od P%d i ažurira lokalni sat c%d=max(%d,%d)+1=%d%s\n",
+                    id, msg_id, msg_l_clock, msg_id, id, proc->l_clock, msg_l_clock, new_l_clock, resp_msg
+            );
+        } else { // Response
+            responses_counter++;
+            fprintf(stdout,
+                    "P%d prima ODGOVOR(%d,%d) od P%d i ažurira lokalni sat c%d=max(%d,%d)+1=%d, odgovori:%d!\n",
+                    id, msg_id, msg_l_clock, msg_id, id, proc->l_clock, msg_l_clock, new_l_clock, responses_counter
+            );
+        }
+        proc->l_clock = new_l_clock;
+        if (responses_counter == g_n - 1) break;
+    }
+}
 
 /* Send request messages to other processes. */
-void send_requests(const struct process *process) {
+void send_requests(const struct process *proc) {
     struct msg_buf buf = {
             .type = Request,
-            .process = *process
+            .proc = *proc
     };
-    int id = process->id;
-    int logic_clock = process->logic_clock;
+    int id = proc->id;
+    int logic_clock = proc->l_clock;
     for (int i = 0; i < g_n; ++i) {
         if (i == id) continue;
         if (write(g_pipes[i * 2 + Write_Operation], &buf, sizeof(buf)) == -1) {
@@ -64,89 +132,43 @@ void send_requests(const struct process *process) {
             exit(EXIT_FAILURE);
         }
         fprintf(stdout,
-                "P%d, čiji je lokalni logički sat c%d=%d, šalje zahtjev(%d,%d) prema P%d!\n",
+                "P%d, čiji je lokalni sat c%d=%d, šalje ZAHTJEV(%d,%d) prema P%d!\n",
                 id, id, logic_clock, id, logic_clock, i
         );
     }
 }
 
-/* Send response message to other process. */
-void send_response(const struct process *process, const struct process *other_process) {
-    int id = process->id;
-    int other_process_id = other_process->id;
-    int other_logic_clock = other_process->logic_clock;
-    struct msg_buf buf = {
-            .type = Response,
-            .process = {
-                    .id = id,
-                    .logic_clock = other_process->logic_clock
-            }
-    };
-    if (write(g_pipes[other_process_id * 2 + Write_Operation], &buf, sizeof(buf)) == -1) {
-        perror("[PROCESS] send_response::write");
-        exit(EXIT_FAILURE);
-    }
-    fprintf(stdout,
-            "P%d šalje odgovor(%d,%d) prema P%d!\n",
-            id, id, other_logic_clock, other_process_id
-    );
-}
-
-/* Receive request/responses messages from other processes and returns an array of processes response. */
-struct process *receive_requests_responses(struct process *process) {
-    struct process *responses = (struct process *) malloc(sizeof(struct process) * (g_n - 1));
-    int responses_counter = 0;
-    int id = process->id;
-    struct msg_buf buf;
-    while (1) {
-        if (read(g_pipes[id * 2 + Read_Operation], &buf, sizeof(buf)) == -1) {
-            perror("[PROCESS] receive_requests::read");
-            exit(EXIT_FAILURE);
-        }
-        struct process msg_process = buf.process;
-        int msg_id = msg_process.id;
-        int msg_logic_clock = msg_process.logic_clock;
-        int logic_clock = process->logic_clock;
-        int new_logic_clock = MAX(logic_clock, msg_logic_clock) + 1;
-        if (buf.type == Request) {
-            char resp_msg[40] = "!";
-            if (!g_enter_cs || logic_clock > msg_logic_clock || (logic_clock == msg_logic_clock && id > msg_id)) {
-                send_response(process, &msg_process);
-                sprintf(resp_msg, " te šalje odgovor(%d,%d) prema P%d!", id, msg_logic_clock, msg_id);
-            }
-            fprintf(stdout,
-                    "P%d prima zahtjev(%d,%d) od P%d i ažurira lokalni logički sat c%d=max(%d,%d)+1=%d%s\n",
-                    id, msg_id, msg_logic_clock, msg_id, id, logic_clock, msg_logic_clock, new_logic_clock, resp_msg
-            );
-        } else { // Response
-
-        }
-        process->logic_clock = new_logic_clock;
-        if (responses_counter == g_n - 1) break;
-    }
-    return responses;
+/* Frees responses array from memory. */
+void free_responses(int signal) {
+    free(responses);
+    exit(EXIT_SUCCESS);
 }
 
 /* Process's working procedure. */
 _Noreturn void process_procedure(int id) {
-    // Map SIGINT to its default behaviour.
-    if (signal(SIGINT, SIG_DFL) == SIG_ERR) {
+    // Map SIGINT to clear responses array.
+    if (signal(SIGINT, free_responses) == SIG_ERR) {
         perror("[PROCESS] process_procedure::signal");
         exit(EXIT_FAILURE);
     }
+    // Initialize responses array.
+    responses = (int *) malloc(sizeof(int) * (g_n - 1));
     // Initialize randomness.
     srand((unsigned) time(NULL) ^ getpid());
     // Create process structure.
-    struct process process = {
+    struct process proc = {
             .id = id,
-            .logic_clock = rand() % g_n
+            .l_clock = rand() % g_n + 1
     };
     // Do work...
     while (1) {
-        send_requests(&process);
+        send_requests(&proc);
         sleep(1);
-        receive_requests_responses(&process);
-        sleep(10);
+        receive_requests_responses(&proc);
+        sleep(1);
+        critical_section(&proc);
+        send_remaining_responses(&proc);
+        sleep(1);
     }
 }
 
@@ -229,8 +251,7 @@ int main(int argc, const char *argv[]) {
     prepare_pipelines();
 
     // Create N processes.
-    int i;
-    for (i = 0; i < g_n; i++) {
+    for (int i = 0; i < g_n; i++) {
         pid_t pid = fork();
         if (pid == -1) {
             perror("[MAIN] fork");
