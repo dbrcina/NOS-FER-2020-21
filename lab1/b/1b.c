@@ -43,13 +43,12 @@ struct db_entry_database {
     int entries;
 };
 
-
 long int g_n;
 int g_smh_id;
-struct db_entry_database *g_db;
+struct db_entry_database *g_db; // N
 int *g_pipes; // Nx2
 int g_enter_cs = 1; // if true, process wants to go in critical section.
-int *responses; // g_n-1 size, postponed responses
+int *g_responses; // g_n size, postponed responses
 
 /* Send response message to other process. */
 void send_response(const struct process *proc, const struct process *other_proc) {
@@ -68,20 +67,49 @@ void send_response(const struct process *proc, const struct process *other_proc)
 
 /* Send remaining response messages to waiting processes. */
 void send_remaining_responses(const struct process *proc) {
-
+    for (int i = 0; i < g_n; ++i) {
+        if (i == proc->id) continue;
+        int other_proc_l_clock = g_responses[i];
+        if (other_proc_l_clock == 0) continue;
+        struct process other_proc = {
+                .id = i,
+                .l_clock = other_proc_l_clock
+        };
+        send_response(proc, &other_proc);
+        fprintf(stdout, "P%d šalje ODGOVOR(%d,%d) prema P%d!\n", proc->id, proc->id, other_proc_l_clock, i);
+        g_responses[i] = 0;
+    }
 }
 
 /* Critical section procedure. */
-void critical_section(struct process *proc) {
-
+void critical_section(const struct process *proc) {
+    fprintf(stdout, "P%d pristupa KO!\n", proc->id);
+    // Print database and update database.
+    for (int i = 0; i < g_n; ++i) {
+        struct db_entry_database *entry = g_db + i;
+        if (i == proc->id) {
+            // Update database.
+            entry->proc = *proc;
+            entry->entries++;
+            if (entry->entries == REPEAT) {
+                g_enter_cs = 0;
+            }
+        }
+        fprintf(stdout, "| P%d | c%d=%2d | entries=%d |\n", i, i, entry->proc.l_clock, entry->entries);
+    }
+    // Sleep for X ms.
+    sleep((LB_X + rand() % (UB_X - LB_X + 1)) / 1000);
+    fprintf(stdout, "P%d napušta KO!\n", proc->id);
 }
 
-/* Receive request/responses messages from other processes and fills an array of responses that needs to be send. */
+/* Receives request/responses messages from other processes, updates local clock of current process by the definition
+ * of global clock and sends responses to other processes if conditions are satisfied, otherwise responses are stored
+ * and answered later. */
 void receive_requests_responses(struct process *proc) {
     int responses_counter = 0;
     int id = proc->id;
-    struct msg_buf buf;
     int current_l_clock = proc->l_clock;
+    struct msg_buf buf;
     while (1) {
         if (read(g_pipes[id * 2 + Read_Operation], &buf, sizeof(buf)) == -1) {
             perror("[PROCESS] receive_requests_responses::read");
@@ -99,7 +127,7 @@ void receive_requests_responses(struct process *proc) {
                 send_response(proc, &msg_proc);
                 sprintf(resp_msg, " te šalje ODGOVOR(%d,%d) prema P%d!", id, msg_l_clock, msg_id);
             } else { // Don't send response, save it!
-                responses[msg_id] = msg_l_clock;
+                g_responses[msg_id] = msg_l_clock;
                 sprintf(resp_msg, " te NE šalje ODGOVOR(%d,%d) prema P%d!", id, msg_l_clock, msg_id);
             }
             fprintf(stdout,
@@ -118,7 +146,7 @@ void receive_requests_responses(struct process *proc) {
     }
 }
 
-/* Send request messages to other processes. */
+/* Sends request messages to other processes. */
 void send_requests(const struct process *proc) {
     if (!g_enter_cs) return;
     struct msg_buf buf = {
@@ -140,21 +168,22 @@ void send_requests(const struct process *proc) {
     }
 }
 
-/* Frees responses array from memory. */
-void free_responses(int signal) {
-    free(responses);
+/* Frees pipelines and responses arrays from memory. */
+void free_pipelines_responses(int signal) {
+    free(g_pipes);
+    free(g_responses);
     exit(EXIT_SUCCESS);
 }
 
 /* Process's working procedure. */
 _Noreturn void process_procedure(int id) {
-    // Map SIGINT to clear responses array.
-    if (signal(SIGINT, free_responses) == SIG_ERR) {
+    // Map SIGINT to clear responses and pipelines arrays.
+    if (signal(SIGINT, free_pipelines_responses) == SIG_ERR) {
         perror("[PROCESS] process_procedure::signal");
         exit(EXIT_FAILURE);
     }
     // Initialize responses array.
-    responses = (int *) malloc(sizeof(int) * (g_n - 1));
+    g_responses = (int *) malloc(sizeof(int) * g_n);
     // Initialize randomness.
     srand((unsigned) time(NULL) ^ getpid());
     // Create process structure.
@@ -165,18 +194,15 @@ _Noreturn void process_procedure(int id) {
     // Do work...
     while (1) {
         send_requests(&proc);
-        sleep(1);
         receive_requests_responses(&proc);
-        sleep(1);
-        sleep(10);
         critical_section(&proc);
         send_remaining_responses(&proc);
-        sleep(1);
     }
 }
 
 /* Creates N pipelines. */
 void prepare_pipelines() {
+    g_pipes = (int *) malloc(g_n * 2 * sizeof(int));
     for (int i = 0; i < g_n; ++i) {
         int fd[2];
         if (pipe(fd) == -1) {
@@ -188,10 +214,11 @@ void prepare_pipelines() {
     }
 }
 
-/* First detaches memory with shmdt function, and then removes g_shm_id with shmctl function. */
+/* First detaches memory with shmdt function, and then removes g_shm_id with shmctl function. Frees g_pipes and
+ * g_responses. */
 void free_memory_and_quit(int signal) {
     fprintf(stdout, "\n");
-    if (shmdt(g_db) == -1 || shmdt(g_pipes) == -1) {
+    if (shmdt(g_db) == -1) {
         perror("[MAIN] free_memory_and_quit::shmdt");
         exit(EXIT_FAILURE);
     }
@@ -201,6 +228,8 @@ void free_memory_and_quit(int signal) {
         exit(EXIT_FAILURE);
     }
     fprintf(stdout, "Segment shmid=%d je uspješno uništen!\n", g_smh_id);
+    free(g_pipes);
+    free(g_responses);
     exit(EXIT_SUCCESS);
 }
 
@@ -212,17 +241,14 @@ void register_signals() {
     }
 }
 
-/* Prepares database and pipelines using shared memory segment. */
+/* Prepares database using shared memory segment. */
 void prepare_shared_memory() {
-    size_t db_size = g_n * sizeof(struct db_entry_database);
-    size_t pipelines_size = g_n * 2 * sizeof(int);
-    if ((g_smh_id = shmget(getuid(), db_size + pipelines_size, IPC_CREAT | PERMS)) == -1) {
+    if ((g_smh_id = shmget(getuid(), g_n * sizeof(struct db_entry_database), IPC_CREAT | PERMS)) == -1) {
         perror("[MAIN] prepare_shared_memory::shmget");
         exit(EXIT_FAILURE);
     }
     g_db = (struct db_entry_database *) shmat(g_smh_id, NULL, 0);
-    g_pipes = (int *) shmat(g_smh_id, NULL, 0);
-    if (*((int *) g_db) == -1 || *g_pipes == -1) {
+    if (*((int *) g_db) == -1) {
         perror("[MAIN] prepare_shared_memory::shmat");
         exit(EXIT_FAILURE);
     }
