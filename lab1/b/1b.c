@@ -191,6 +191,7 @@ _Noreturn void process_procedure(int id) {
             .id = id,
             .l_clock = rand() % g_n + 1
     };
+    g_db[id].proc = proc;
     // Do work...
     while (1) {
         send_requests(&proc);
