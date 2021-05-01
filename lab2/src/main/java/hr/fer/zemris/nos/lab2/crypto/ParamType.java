@@ -1,4 +1,4 @@
-package hr.fer.zemris.nos.lab2.crypto.api;
+package hr.fer.zemris.nos.lab2.crypto;
 
 public enum ParamType {
 
@@ -16,13 +16,7 @@ public enum ParamType {
     ENVELOPE_DATA("Envelope data"),
     ENVELOPE_CRYPT_KEY("Envelope crypt key");
 
-    public static final int size;
-    private static final ParamType[] params;
-
-    static {
-        params = values();
-        size = params.length;
-    }
+    private static final ParamType[] params = values();
 
     private final String representation;
 
