@@ -5,7 +5,7 @@ import hr.fer.zemris.nos.lab2.crypto.ParamType;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.Paths;
+import java.nio.file.Path;
 import java.util.Map;
 
 public class Utils {
@@ -30,7 +30,7 @@ public class Utils {
         return hex;
     }
 
-    public static void writeResults(String file, Map<ParamType, String[]> params) throws IOException {
+    public static void writeResults(Path file, Map<ParamType, String[]> params) throws IOException {
         StringBuilder sb = new StringBuilder();
         String sep = System.lineSeparator();
         String fourSpaces = " ".repeat(4);
@@ -41,15 +41,15 @@ public class Utils {
                 // Wrap text at 60 characters.
                 int k = data.length() / 60 + 1;
                 for (int i = 0; i < k; i++) {
-                    int start = i * k;
-                    int end = start + i == (k - 1) ? data.length() : 60;
+                    int start = i * 60;
+                    int end = i == (k - 1) ? data.length() : start + 60;
                     sb.append(fourSpaces).append(data, start, end).append(sep);
                 }
             }
             sb.append(sep);
         }
         sb.append("---END OS2 CRYPTO DATA---");
-        Files.writeString(Paths.get(file), sb);
+        Files.writeString(file, sb);
     }
 
 }

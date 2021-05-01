@@ -36,8 +36,9 @@ public class Demo {
             System.out.printf("Symmetric algorithm: %s/%d/%s%n", symAlgName, secretKeyLength, mode);
 
             SymmetricAlg symmetricAlg = new SymmetricAlg(symAlgName, secretKeyLength, mode);
-            symmetricAlg.generateKey();
+            symmetricAlg.generateKey("sender-secret.txt");
             symmetricAlg.generateIV();
+            symmetricAlg.encrypt(file, "sender-data-encrypted.txt");
         }
     }
 
