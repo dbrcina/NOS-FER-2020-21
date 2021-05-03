@@ -1,9 +1,12 @@
 package hr.fer.zemris.nos.lab2;
 
-import hr.fer.zemris.nos.lab2.crypto.CryptoAlg;
+import hr.fer.zemris.nos.lab2.crypto.HashAlg;
 import hr.fer.zemris.nos.lab2.crypto.RSA;
+import hr.fer.zemris.nos.lab2.crypto.SignatureAlg;
 import hr.fer.zemris.nos.lab2.crypto.SymmetricAlg;
 
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.Scanner;
@@ -25,23 +28,33 @@ public class Demo {
     private static final String DEFAULT_SYMMETRIC_MODE = "CBC";
     private static final String[] RSA_KEY_LENGTHS = {"1024", "2048", "3072", "4096"};
     private static final String DEFAULT_RSA_KEY_LENGTH = "2048";
+    private static final String[] HASH_ALGORITHM_KEY_LENGTHS = {"224", "256", "384", "512"};
+    private static final String DEFAULT_HASH_ALGORITHM_KEY_LENGTH = "512";
 
     public static void main(String[] args) throws Exception {
         try (Scanner sc = new Scanner(System.in)) {
             String file = parseFileName(sc);
-            CryptoAlg senderSymmetricAlg = parseSymmetricAlgorithm(sc);
+            System.out.println("-------------------------------------");
+            SymmetricAlg senderSymmetricAlg = parseSymmetricAlgorithm(sc);
+            System.out.println("-------------------------------------");
             RSA senderRSA = parseRSA(sc, "sender");
+            System.out.println("-------------------------------------");
             RSA receiverRSA = parseRSA(sc, "receiver");
+            System.out.println("-------------------------------------");
+            HashAlg hash = parseHashAlgorithm(sc);
             System.out.println("-------------------------------------");
             System.out.println("\t[SENDER]:");
             senderSymmetricAlg.generateKey("sender");
-            String encodedData = senderSymmetricAlg.encrypt(file, "sender-sym");
             senderRSA.generateKey("sender");
             System.out.println("-------------------------------------");
             System.out.println("\t[RECEIVER]:");
             receiverRSA.generateKey("receiver");
             System.out.println("-------------------------------------");
-            senderRSA.encrypt(file, "sender.secret", false);
+            System.out.println("\t[SENDER]:");
+            byte[] plainData = Files.readAllBytes(Paths.get(file));
+            String encodedData = senderSymmetricAlg.encrypt(plainData, file, "envelope-data");
+            SignatureAlg.signature(encodedData, senderRSA, hash, file, "sender");
+//            senderRSA.encrypt(file, "sender.secret", false);
         }
     }
 
@@ -112,6 +125,24 @@ public class Demo {
             System.exit(-1);
         }
         return new RSA(Integer.parseInt(keyLength));
+    }
+
+    private static HashAlg parseHashAlgorithm(Scanner sc) throws Exception {
+        System.out.print("Do you want to use hash function for digital signature (y/n): ");
+        String line = sc.nextLine();
+        if (line.equalsIgnoreCase("n")) return null;
+        String keyLengths = String.join(",", HASH_ALGORITHM_KEY_LENGTHS);
+        System.out.printf(
+                "SHA3 hashing function is used. Choose key length [%s] or press enter for '%s': ",
+                keyLengths, DEFAULT_HASH_ALGORITHM_KEY_LENGTH
+        );
+        line = sc.nextLine();
+        String keyLength = line.isEmpty() ? DEFAULT_HASH_ALGORITHM_KEY_LENGTH : line;
+        if (Arrays.stream(HASH_ALGORITHM_KEY_LENGTHS).noneMatch(key -> key.equals(keyLength))) {
+            System.out.printf("'%s' is invalid key length! Exiting...%n", keyLength);
+            System.exit(-1);
+        }
+        return new HashAlg("SHA3", Integer.parseInt(keyLength));
     }
 
 }
