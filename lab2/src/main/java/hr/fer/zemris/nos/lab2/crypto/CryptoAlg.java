@@ -16,23 +16,21 @@ public abstract class CryptoAlg {
     private final Cipher cipher;
 
     protected CryptoAlg(String name, int keySize, String mode, String padding) throws Exception {
-        this.name = name.equalsIgnoreCase("3DES") ? "DESede" : name;
+        this.name = name;
         this.keySize = keySize;
         this.keySizeHex = Utils.intToHex(keySize);
         this.mode = mode;
-        this.cipher = Cipher.getInstance("%s/%s/%s".formatted(this.name, mode, padding));
+        this.cipher = Cipher.getInstance("%s/%s/%s".formatted(name, mode, padding));
     }
 
     public abstract void generateKey(String saveFile) throws Exception;
 
-    public String encrypt(byte[] plainData, String fileDataName, String saveFile) throws Exception {
-        String name = this.name.equals("DESede") ? "3DES" : this.name;
+    public String encrypt(byte[] data, String sourceFile, String saveFile) throws Exception {
         System.out.printf("Encrypting using '%s'...%n", name);
-
         initCipher(true);
-        byte[] cypherText = cipher.doFinal(plainData);
+        byte[] cypherText = cipher.doFinal(data);
         String encoded = Base64.getEncoder().encodeToString(cypherText);
-        System.out.println("\tEncryption successful!");
+        System.out.println("Encryption successful!");
 
         if (saveFile != null) {
             saveFile += ".encrypted";
@@ -40,13 +38,13 @@ public abstract class CryptoAlg {
             params.put(ParamType.DESCRIPTION, new String[]{"Crypted file"});
             params.put(ParamType.METHOD, new String[]{name});
             params.put(ParamType.KEY_LENGTH, new String[]{keySizeHex});
-            if (fileDataName != null) {
-                params.put(ParamType.FILE_NAME, new String[]{fileDataName});
+            if (sourceFile != null) {
+                params.put(ParamType.FILE_NAME, new String[]{sourceFile});
             }
             params.put(ParamType.DATA, new String[]{encoded});
             putParamsEncryption(params);
             Utils.writeResults(Paths.get(saveFile), params);
-            System.out.printf("\tResults are stored into '%s' file.%n", saveFile);
+            System.out.printf("Results are stored into '%s' file.%n", saveFile);
         }
 
         return encoded;
@@ -56,21 +54,19 @@ public abstract class CryptoAlg {
 
     protected abstract void putParamsEncryption(Map<ParamType, String[]> params);
 
-    public byte[] decrypt(byte[] cypher, String saveFile) throws Exception {
-        String name = this.name.equals("DESede") ? "3DES" : this.name;
+    public byte[] decrypt(byte[] encoded, String saveFile) throws Exception {
         System.out.printf("Decrypting using '%s'...%n", name);
-
         initCipher(false);
-        byte[] plainData = cipher.doFinal(Base64.getDecoder().decode(cypher));
-        System.out.println("\tDecryption successful!");
+        byte[] data = cipher.doFinal(Base64.getDecoder().decode(encoded));
+        System.out.println("Decryption successful!");
 
         if (saveFile != null) {
             saveFile += ".decrypted";
-            Files.write(Paths.get(saveFile), plainData);
-            System.out.printf("\tResults are stored into '%s' file.%n", saveFile);
+            Files.write(Paths.get(saveFile), data);
+            System.out.printf("Results are stored into '%s' file.%n", saveFile);
         }
 
-        return plainData;
+        return data;
     }
 
     public String getName() {

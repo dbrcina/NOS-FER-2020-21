@@ -11,15 +11,15 @@ import java.util.Scanner;
 public class Demo {
 
     private static final String DEFAULT_FILE = "./default.txt";
-    private static final String[] SYMMETRIC_ALGORITHMS = {"AES", "3DES"};
+    private static final String[] SYMMETRIC_ALGORITHMS = {"AES", "DESede"};
     private static final String DEFAULT_SYMMETRIC_ALGORITHM = "AES";
     private static final Map<String, String[]> SECRET_KEY_LENGTHS = Map.of(
             "AES", new String[]{"128", "192", "256"},
-            "3DES", new String[]{"112", "168"}
+            "DESEDE", new String[]{"112", "168"}
     );
     private static final Map<String, String> DEFAULT_SECRET_KEY_LENGTHS = Map.of(
             "AES", "128",
-            "3DES", "168"
+            "DESEDE", "168"
     );
     private static final String[] SYMMETRIC_MODES = {"ECB", "CBC", "OFB", "CFB", "CTR"};
     private static final String DEFAULT_SYMMETRIC_MODE = "CBC";
@@ -30,7 +30,7 @@ public class Demo {
 
     public static void main(String[] args) throws Exception {
         try (Scanner sc = new Scanner(System.in)) {
-            String file = parseFileName(sc);
+            String sourceFile = parseFileName(sc);
             System.out.println("-------------------------------------");
             SymmetricAlg senderSymmetricAlg = parseSymmetricAlgorithm(sc);
             System.out.println("-------------------------------------");
@@ -48,14 +48,16 @@ public class Demo {
             receiverRSA.generateKey("receiver");
             System.out.println("-------------------------------------");
             System.out.println("\t[SENDER]:");
-            byte[] plainData = Files.readAllBytes(Paths.get(file));
-            String[] envelope = EnvelopeAlg.envelope(plainData, senderSymmetricAlg, receiverRSA, file, "sender");
+            byte[] data = Files.readAllBytes(Paths.get(sourceFile));
+            EnvelopeAlg envelopeAlg = new EnvelopeAlg(senderSymmetricAlg, receiverRSA);
+            String[] envelope = envelopeAlg.envelope(data, sourceFile, "sender");
             System.out.println("-------------------------------------");
             System.out.println("\t[SENDER]:");
-            byte[] signature = SignatureAlg.signature(envelope[0].getBytes(), senderRSA, hash, file, "sender");
+            SignatureAlg signatureAlg = new SignatureAlg(hash, senderRSA);
+            byte[] signature = signatureAlg.signature(envelope[0].getBytes(), sourceFile, "sender");
             System.out.println("-------------------------------------");
             System.out.println("\t[RECEIVER]:");
-            boolean isValid = SignatureAlg.verify(envelope[0].getBytes(), signature, senderRSA, hash);
+            boolean isValid = signatureAlg.verify(envelope[0].getBytes(), signature);
             System.out.printf("Signature is %s!%n", isValid ? "valid" : "invalid");
             System.out.println("-------------------------------------");
             System.out.println("\t[RECEIVER]:");
@@ -63,9 +65,9 @@ public class Demo {
             byte[] secretKey = receiverRSA.decrypt(envelope[1].getBytes(), null);
             System.out.printf(
                     "Are real and decrypted secret keys equal: %s%n",
-                    Arrays.equals(secretKey, senderSymmetricAlg.getSecretKeyBytes())
+                    Arrays.equals(secretKey, senderSymmetricAlg.getSecretKey())
             );
-            SymmetricAlg receiverSymAlg = new SymmetricAlg("3DES", 112, "ecb");
+            SymmetricAlg receiverSymAlg = new SymmetricAlg("DESEDE", 112, "ecb");
             receiverSymAlg.setKey(secretKey);
             System.out.println("-------------------------------------");
             System.out.println("\t[RECEIVER]:");
@@ -73,7 +75,7 @@ public class Demo {
             byte[] decryptedData = receiverSymAlg.decrypt(envelope[0].getBytes(), "sender");
             System.out.printf(
                     "Are real and decrypted data equal: %s%n",
-                    Arrays.equals(plainData, decryptedData)
+                    Arrays.equals(data, decryptedData)
             );
         }
     }
@@ -98,7 +100,7 @@ public class Demo {
         );
         String line = sc.nextLine();
         String symAlgName = line.isEmpty() ? DEFAULT_SYMMETRIC_ALGORITHM : line.toUpperCase();
-        if (Arrays.stream(SYMMETRIC_ALGORITHMS).noneMatch(alg -> alg.equals(symAlgName))) {
+        if (Arrays.stream(SYMMETRIC_ALGORITHMS).noneMatch(alg -> alg.equalsIgnoreCase(symAlgName))) {
             System.out.printf("'%s' is invalid symmetric algorithm! Exiting...%n", symAlgName);
             System.exit(-1);
         }

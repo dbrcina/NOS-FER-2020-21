@@ -14,7 +14,7 @@ public class RSA extends CryptoAlg {
 
     private RSAPublicKey publicKey;
     private RSAPrivateKey privateKey;
-    private boolean withPublic;
+    private boolean withPrivate;
 
     public RSA(int keySize) throws Exception {
         super("RSA", keySize, "ECB", "PKCS1Padding");
@@ -48,28 +48,28 @@ public class RSA extends CryptoAlg {
     }
 
     @Override
-    public String encrypt(byte[] plainData, String fileDataName, String saveFile) throws Exception {
-        return encrypt(plainData, fileDataName, saveFile, false);
+    public String encrypt(byte[] data, String sourceFile, String saveFile) throws Exception {
+        return encrypt(data, sourceFile, saveFile, false);
     }
 
-    public String encrypt(byte[] plainData, String fileDataName, String saveFile, boolean withPublic) throws Exception {
-        this.withPublic = withPublic;
-        return super.encrypt(plainData, fileDataName, saveFile);
+    public String encrypt(byte[] data, String sourceFile, String saveFile, boolean withPrivate) throws Exception {
+        this.withPrivate = withPrivate;
+        return super.encrypt(data, sourceFile, saveFile);
     }
 
     @Override
-    public byte[] decrypt(byte[] cypher, String saveFile) throws Exception {
-        return decrypt(cypher, saveFile, false);
+    public byte[] decrypt(byte[] encoded, String saveFile) throws Exception {
+        return decrypt(encoded, saveFile, true);
     }
 
-    public byte[] decrypt(byte[] cypher, String saveFile, boolean withPublic) throws Exception {
-        this.withPublic = withPublic;
-        return super.decrypt(cypher, saveFile);
+    public byte[] decrypt(byte[] encoded, String saveFile, boolean withPrivate) throws Exception {
+        this.withPrivate = withPrivate;
+        return super.decrypt(encoded, saveFile);
     }
 
     @Override
     protected void initCipher(boolean encryption) throws Exception {
-        getCipher().init(encryption ? Cipher.ENCRYPT_MODE : Cipher.DECRYPT_MODE, withPublic ? publicKey : privateKey);
+        getCipher().init(encryption ? Cipher.ENCRYPT_MODE : Cipher.DECRYPT_MODE, withPrivate ? privateKey : publicKey);
     }
 
     @Override

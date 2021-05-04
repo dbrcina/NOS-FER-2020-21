@@ -3,9 +3,10 @@ package hr.fer.zemris.nos.lab2.crypto;
 public enum ParamType {
 
     DESCRIPTION("Description"),
-    METHOD("Method"),
     FILE_NAME("File name"),
+    METHOD("Method"),
     KEY_LENGTH("Key length"),
+    MODE("Mode"),
     SECRET_KEY("Secret key"),
     INITIALIZATION_VECTOR("Initialization vector"),
     MODULUS("Modulus"),
