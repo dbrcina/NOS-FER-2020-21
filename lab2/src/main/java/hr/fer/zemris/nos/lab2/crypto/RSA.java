@@ -58,8 +58,18 @@ public class RSA extends CryptoAlg {
     }
 
     @Override
-    protected void initCipherEncryption(Cipher cipher) throws Exception {
-        cipher.init(Cipher.ENCRYPT_MODE, withPublic ? publicKey : privateKey);
+    public byte[] decrypt(byte[] cypher, String saveFile) throws Exception {
+        return decrypt(cypher, saveFile, false);
+    }
+
+    public byte[] decrypt(byte[] cypher, String saveFile, boolean withPublic) throws Exception {
+        this.withPublic = withPublic;
+        return super.decrypt(cypher, saveFile);
+    }
+
+    @Override
+    protected void initCipher(boolean encryption) throws Exception {
+        getCipher().init(encryption ? Cipher.ENCRYPT_MODE : Cipher.DECRYPT_MODE, withPublic ? publicKey : privateKey);
     }
 
     @Override

@@ -1,20 +1,20 @@
 package hr.fer.zemris.nos.lab2.crypto;
 
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.TreeMap;
 
 public class SignatureAlg {
 
     public static byte[] signature(
-            byte[] data, RSA rsa, HashAlg hash, String fileDataName, String saveFile) throws Exception {
+            byte[] data, RSA senderRsa, HashAlg hash, String fileDataName, String saveFile) throws Exception {
         System.out.println("Creating signature...");
         byte[] signatureData = data;
         if (hash != null) {
             signatureData = hash.digest(signatureData);
         }
-        signatureData = rsa.encrypt(signatureData, null, null).getBytes(StandardCharsets.UTF_8);
+        signatureData = senderRsa.encrypt(signatureData, null, null).getBytes();
         System.out.println("Signature created successfully!");
 
         if (saveFile != null) {
@@ -26,8 +26,8 @@ public class SignatureAlg {
                     : new String[]{hash.getName(), "RSA"}
             );
             params.put(ParamType.KEY_LENGTH, hash == null
-                    ? new String[]{rsa.getKeySizeHex()}
-                    : new String[]{hash.getKeySizeHex(), rsa.getKeySizeHex()}
+                    ? new String[]{senderRsa.getKeySizeHex()}
+                    : new String[]{hash.getKeySizeHex(), senderRsa.getKeySizeHex()}
             );
             if (fileDataName != null) {
                 params.put(ParamType.FILE_NAME, new String[]{fileDataName});
@@ -38,6 +38,13 @@ public class SignatureAlg {
         }
 
         return signatureData;
+    }
+
+    public static boolean verify(byte[] data, byte[] signature, RSA senderRSA, HashAlg hash) throws Exception {
+        System.out.println("Verifying signature...");
+        byte[] hashedData = hash.digest(data);
+        byte[] decryptedData = senderRSA.decrypt(signature, null, true);
+        return Arrays.equals(hashedData, decryptedData);
     }
 
 }

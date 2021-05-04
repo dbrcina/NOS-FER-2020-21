@@ -4,6 +4,7 @@ import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
 import java.nio.file.Paths;
 import java.security.SecureRandom;
 import java.util.Map;
@@ -38,9 +39,18 @@ public class SymmetricAlg extends CryptoAlg {
     }
 
     @Override
-    protected void initCipherEncryption(Cipher cipher) throws Exception {
-        generateIV();
-        cipher.init(Cipher.ENCRYPT_MODE, secretKey, iv);
+    protected void initCipher(boolean encryption) throws Exception {
+        Cipher cipher = getCipher();
+        int opMode = encryption ? Cipher.ENCRYPT_MODE : Cipher.DECRYPT_MODE;
+        boolean ecbMode = getMode().equalsIgnoreCase("ecb");
+        if (ecbMode) {
+            cipher.init(opMode, secretKey);
+        } else {
+            if (encryption) {
+                generateIV();
+            }
+            cipher.init(opMode, secretKey, iv);
+        }
     }
 
     @Override
@@ -49,14 +59,19 @@ public class SymmetricAlg extends CryptoAlg {
     }
 
     public void generateIV() {
-        int blockSize = getName().equals("AES") ? 16 : 8;
-        byte[] bytes = new byte[blockSize];
+//        int blockSize = getName().equals("AES") ? 16 : 8;
+        byte[] bytes = new byte[getCipher().getBlockSize()];
         new SecureRandom().nextBytes(bytes);
         iv = new IvParameterSpec(bytes);
     }
 
     public byte[] getSecretKeyBytes() {
         return secretKeyBytes;
+    }
+
+    public void setKey(byte[] key) {
+        secretKey = new SecretKeySpec(key, getName());
+        secretKeyBytes = secretKey.getEncoded();
     }
 
 }

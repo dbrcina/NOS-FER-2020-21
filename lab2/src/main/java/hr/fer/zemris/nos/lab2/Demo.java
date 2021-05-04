@@ -52,7 +52,29 @@ public class Demo {
             String[] envelope = EnvelopeAlg.envelope(plainData, senderSymmetricAlg, receiverRSA, file, "sender");
             System.out.println("-------------------------------------");
             System.out.println("\t[SENDER]:");
-            SignatureAlg.signature(envelope[0].getBytes(), senderRSA, hash, file, "sender");
+            byte[] signature = SignatureAlg.signature(envelope[0].getBytes(), senderRSA, hash, file, "sender");
+            System.out.println("-------------------------------------");
+            System.out.println("\t[RECEIVER]:");
+            boolean isValid = SignatureAlg.verify(envelope[0].getBytes(), signature, senderRSA, hash);
+            System.out.printf("Signature is %s!%n", isValid ? "valid" : "invalid");
+            System.out.println("-------------------------------------");
+            System.out.println("\t[RECEIVER]:");
+            System.out.println("Decrypting sender's secret key...");
+            byte[] secretKey = receiverRSA.decrypt(envelope[1].getBytes(), null);
+            System.out.printf(
+                    "Are real and decrypted secret keys equal: %s%n",
+                    Arrays.equals(secretKey, senderSymmetricAlg.getSecretKeyBytes())
+            );
+            SymmetricAlg receiverSymAlg = new SymmetricAlg("3DES", 112, "ecb");
+            receiverSymAlg.setKey(secretKey);
+            System.out.println("-------------------------------------");
+            System.out.println("\t[RECEIVER]:");
+            System.out.println("Decrypting sender's data...");
+            byte[] decryptedData = receiverSymAlg.decrypt(envelope[0].getBytes(), "sender");
+            System.out.printf(
+                    "Are real and decrypted data equal: %s%n",
+                    Arrays.equals(plainData, decryptedData)
+            );
         }
     }
 
@@ -126,15 +148,12 @@ public class Demo {
     }
 
     private static HashAlg parseHashAlgorithm(Scanner sc) throws Exception {
-        System.out.print("Do you want to use hash function for digital signature (y/n): ");
-        String line = sc.nextLine();
-        if (line.equalsIgnoreCase("n")) return null;
         String keyLengths = String.join(",", HASH_ALGORITHM_KEY_LENGTHS);
         System.out.printf(
-                "SHA3 hashing function is used. Choose key length [%s] or press enter for '%s': ",
+                "SHA3 hashing function is used for digital signature. Choose key length [%s] or press enter for '%s': ",
                 keyLengths, DEFAULT_HASH_ALGORITHM_KEY_LENGTH
         );
-        line = sc.nextLine();
+        String line = sc.nextLine();
         String keyLength = line.isEmpty() ? DEFAULT_HASH_ALGORITHM_KEY_LENGTH : line;
         if (Arrays.stream(HASH_ALGORITHM_KEY_LENGTHS).noneMatch(key -> key.equals(keyLength))) {
             System.out.printf("'%s' is invalid key length! Exiting...%n", keyLength);
