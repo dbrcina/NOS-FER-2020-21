@@ -1,9 +1,6 @@
 package hr.fer.zemris.nos.lab2;
 
-import hr.fer.zemris.nos.lab2.crypto.HashAlg;
-import hr.fer.zemris.nos.lab2.crypto.RSA;
-import hr.fer.zemris.nos.lab2.crypto.SignatureAlg;
-import hr.fer.zemris.nos.lab2.crypto.SymmetricAlg;
+import hr.fer.zemris.nos.lab2.crypto.*;
 
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -52,9 +49,10 @@ public class Demo {
             System.out.println("-------------------------------------");
             System.out.println("\t[SENDER]:");
             byte[] plainData = Files.readAllBytes(Paths.get(file));
-            String encodedData = senderSymmetricAlg.encrypt(plainData, file, "envelope-data");
-            SignatureAlg.signature(encodedData, senderRSA, hash, file, "sender");
-//            senderRSA.encrypt(file, "sender.secret", false);
+            String[] envelope = EnvelopeAlg.envelope(plainData, senderSymmetricAlg, receiverRSA, file, "sender");
+            System.out.println("-------------------------------------");
+            System.out.println("\t[SENDER]:");
+            SignatureAlg.signature(envelope[0].getBytes(), senderRSA, hash, file, "sender");
         }
     }
 

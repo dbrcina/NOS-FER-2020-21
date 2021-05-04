@@ -5,14 +5,12 @@ import java.security.MessageDigest;
 public class HashAlg {
 
     private final String name;
-    private final int keySize;
-    private final String keySizeHash;
+    private final String keySizeHex;
     private final MessageDigest messageDigest;
 
     public HashAlg(String name, int keySize) throws Exception {
         this.name = name;
-        this.keySize = keySize;
-        this.keySizeHash = Utils.intToHex(keySize);
+        this.keySizeHex = Utils.intToHex(keySize);
         this.messageDigest = MessageDigest.getInstance(name + "-" + keySize);
     }
 
@@ -24,8 +22,8 @@ public class HashAlg {
         return name;
     }
 
-    public String getKeySizeHash() {
-        return keySizeHash;
+    public String getKeySizeHex() {
+        return keySizeHex;
     }
 
 }

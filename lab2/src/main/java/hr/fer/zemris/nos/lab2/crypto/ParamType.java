@@ -16,8 +16,6 @@ public enum ParamType {
     ENVELOPE_DATA("Envelope data"),
     ENVELOPE_CRYPT_KEY("Envelope crypt key");
 
-    private static final ParamType[] params = values();
-
     private final String representation;
 
     ParamType(String representation) {
@@ -27,17 +25,6 @@ public enum ParamType {
     @Override
     public String toString() {
         return representation;
-    }
-
-    public static ParamType forName(String name) {
-        for (ParamType param : params) {
-            if (param.representation.equals(name)) return param;
-        }
-        return null;
-    }
-
-    public static ParamType forOrd(int ord) {
-        return params[ord];
     }
 
 }
