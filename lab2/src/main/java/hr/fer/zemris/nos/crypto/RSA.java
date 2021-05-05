@@ -1,4 +1,4 @@
-package hr.fer.zemris.nos.lab2.crypto;
+package hr.fer.zemris.nos.crypto;
 
 import javax.crypto.Cipher;
 import java.io.IOException;
@@ -52,7 +52,7 @@ public class RSA extends CryptoAlg {
         return encrypt(data, sourceFile, saveFile, false);
     }
 
-    public String encrypt(byte[] data, String sourceFile, String saveFile, boolean withPrivate) throws Exception {
+    protected String encrypt(byte[] data, String sourceFile, String saveFile, boolean withPrivate) throws Exception {
         this.withPrivate = withPrivate;
         return super.encrypt(data, sourceFile, saveFile);
     }
@@ -62,7 +62,7 @@ public class RSA extends CryptoAlg {
         return decrypt(encoded, saveFile, true);
     }
 
-    public byte[] decrypt(byte[] encoded, String saveFile, boolean withPrivate) throws Exception {
+    protected byte[] decrypt(byte[] encoded, String saveFile, boolean withPrivate) throws Exception {
         this.withPrivate = withPrivate;
         return super.decrypt(encoded, saveFile);
     }

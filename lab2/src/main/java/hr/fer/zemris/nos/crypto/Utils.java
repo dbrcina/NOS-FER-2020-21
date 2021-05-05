@@ -1,4 +1,4 @@
-package hr.fer.zemris.nos.lab2.crypto;
+package hr.fer.zemris.nos.crypto;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;

@@ -1,4 +1,4 @@
-package hr.fer.zemris.nos.lab2.crypto;
+package hr.fer.zemris.nos.crypto;
 
 import java.nio.file.Paths;
 import java.util.Map;
@@ -26,6 +26,7 @@ public class EnvelopeAlg {
             params.put(ParamType.DESCRIPTION, new String[]{"Envelope"});
             params.put(ParamType.METHOD, new String[]{symmetricAlg.getName(), rsa.getName()});
             params.put(ParamType.KEY_LENGTH, new String[]{symmetricAlg.getKeySizeHex(), rsa.getKeySizeHex()});
+            params.put(ParamType.MODE, new String[]{symmetricAlg.getMode()});
             if (sourceFile != null) {
                 params.put(ParamType.FILE_NAME, new String[]{sourceFile});
             }

@@ -1,6 +1,6 @@
-package hr.fer.zemris.nos.lab2;
+package hr.fer.zemris.nos;
 
-import hr.fer.zemris.nos.lab2.crypto.*;
+import hr.fer.zemris.nos.crypto.*;
 
 import java.nio.file.Files;
 import java.nio.file.Paths;

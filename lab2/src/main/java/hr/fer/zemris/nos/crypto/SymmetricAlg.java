@@ -1,4 +1,4 @@
-package hr.fer.zemris.nos.lab2.crypto;
+package hr.fer.zemris.nos.crypto;
 
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
