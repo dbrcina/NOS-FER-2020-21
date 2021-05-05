@@ -1,14 +1,21 @@
 package hr.fer.zemris.nos.crypto;
 
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.Map;
 
 public class Utils {
 
     private static final byte[] HEX_ARRAY = "0123456789abcdef".getBytes(StandardCharsets.US_ASCII);
+    private static final String BEGIN_FILE = "---BEGIN OS2 CRYPTO DATA---";
+    private static final String END_FILE = "---END OS2 CRYPTO DATA---";
 
     public static String bytesToHex(byte[] bytes) {
         byte[] hexChars = new byte[bytes.length * 2];
@@ -32,7 +39,7 @@ public class Utils {
         StringBuilder sb = new StringBuilder();
         String sep = System.lineSeparator();
         String fourSpaces = " ".repeat(4);
-        sb.append("---BEGIN OS2 CRYPTO DATA---").append(sep);
+        sb.append(BEGIN_FILE).append(sep);
         for (Map.Entry<ParamType, String[]> param : params.entrySet()) {
             sb.append(param.getKey()).append(":").append(sep);
             for (String data : param.getValue()) {
@@ -46,8 +53,37 @@ public class Utils {
             }
             sb.append(sep);
         }
-        sb.append("---END OS2 CRYPTO DATA---");
+        sb.append(END_FILE);
         Files.writeString(file, sb);
+    }
+
+    public static Map<ParamType, String[]> parseCryptoFile(String cryptoFile) throws Exception {
+        Map<ParamType, String[]> params = new HashMap<>();
+        try (BufferedReader br = Files.newBufferedReader(Paths.get(cryptoFile))) {
+            boolean inside = false;
+            while (true) {
+                String line = br.readLine();
+                if (line == null) break;
+                line = line.strip();
+                if (line.equals(END_FILE)) break;
+                if (line.isEmpty()) continue;
+                if (line.equals(BEGIN_FILE)) {
+                    inside = true;
+                    continue;
+                }
+                if (inside) {
+                    ParamType paramType = ParamType.forRepresentation(line.split(":")[0]);
+                    Collection<String> paramValues = new ArrayList<>();
+                    while (!(line = br.readLine().strip()).isEmpty()) {
+                        paramValues.add(line);
+                    }
+                    params.put(paramType, paramValues.toArray(String[]::new));
+                }
+            }
+        } catch (Exception e) {
+            throw new Exception(String.format("'%s' is invalid crypto file!%n%s", cryptoFile, e.getMessage()));
+        }
+        return params;
     }
 
 }

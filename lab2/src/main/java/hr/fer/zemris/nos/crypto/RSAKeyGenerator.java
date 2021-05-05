@@ -19,10 +19,9 @@ public class RSAKeyGenerator {
     public static void main(String[] args) throws Exception {
         try (Scanner sc = new Scanner(System.in)) {
             // Parse key size.
-            String keySizes = String.join(",", RSA_KEY_SIZES);
             System.out.printf(
                     "Choose RSA key size [%s] or press enter for '%s': ",
-                    keySizes, DEFAULT_RSA_KEY_SIZE
+                    String.join(",", RSA_KEY_SIZES), DEFAULT_RSA_KEY_SIZE
             );
             String line = sc.nextLine();
             String keySize = line.isEmpty() ? DEFAULT_RSA_KEY_SIZE : line;
@@ -36,11 +35,11 @@ public class RSAKeyGenerator {
             line = sc.nextLine();
             String saveFile = line.isEmpty() ? DEFAULT_SAVE_FILE : line;
 
-            generateKey(Integer.parseInt(keySize), saveFile);
+            generateRSAKeys(Integer.parseInt(keySize), saveFile);
         }
     }
 
-    private static void generateKey(int keySize, String saveFile) throws Exception {
+    private static void generateRSAKeys(int keySize, String saveFile) throws Exception {
         System.out.println("Generating RSA keys...");
         KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
         keyPairGenerator.initialize(keySize);
@@ -51,11 +50,11 @@ public class RSAKeyGenerator {
         String mod = Utils.bytesToHex(publicKey.getModulus().toByteArray());
         String publicExponent = Utils.bytesToHex(publicKey.getPublicExponent().toByteArray());
         String privateExponent = Utils.bytesToHex(privateKey.getPrivateExponent().toByteArray());
-        saveKeys(true, keySizeHex, mod, publicExponent, saveFile + ".pub");
-        saveKeys(false, keySizeHex, mod, privateExponent, saveFile + ".priv");
+        saveRSAKeys(true, keySizeHex, mod, publicExponent, saveFile + ".pub");
+        saveRSAKeys(false, keySizeHex, mod, privateExponent, saveFile + ".priv");
     }
 
-    private static void saveKeys(
+    private static void saveRSAKeys(
             boolean isPublic, String keySizeHex, String mod, String exp, String saveFile) throws Exception {
         String description = (isPublic ? "Public" : "Private") + " key";
         Map<ParamType, String[]> params = new TreeMap<>();

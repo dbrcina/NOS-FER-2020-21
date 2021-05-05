@@ -25,10 +25,9 @@ public class SymmetricKeyGenerator {
     public static void main(String[] args) throws Exception {
         try (Scanner sc = new Scanner(System.in)) {
             // Parse symmetric algorithm's name.
-            String algNames = String.join(",", SYMMETRIC_ALGORITHMS);
             System.out.printf(
                     "Choose symmetric algorithm [%s] or press enter for '%s': ",
-                    algNames, DEFAULT_SYMMETRIC_ALGORITHM
+                    String.join(",", SYMMETRIC_ALGORITHMS), DEFAULT_SYMMETRIC_ALGORITHM
             );
             String line = sc.nextLine();
             String name = line.isEmpty() ? DEFAULT_SYMMETRIC_ALGORITHM : line.toUpperCase();
@@ -38,10 +37,9 @@ public class SymmetricKeyGenerator {
             }
 
             // Parse symmetric algorithm's key size.
-            String secretKeySizes = String.join(",", SECRET_KEY_SIZES.get(name));
             System.out.printf(
                     "Choose key size [%s] or press enter for '%s': ",
-                    secretKeySizes, DEFAULT_SECRET_KEY_SIZES.get(name));
+                    String.join(",", SECRET_KEY_SIZES.get(name)), DEFAULT_SECRET_KEY_SIZES.get(name));
             line = sc.nextLine();
             String keySize = line.isEmpty() ? DEFAULT_SECRET_KEY_SIZES.get(name) : line;
             if (Arrays.stream(SECRET_KEY_SIZES.get(name)).noneMatch(size -> size.equals(keySize))) {
@@ -54,11 +52,11 @@ public class SymmetricKeyGenerator {
             line = sc.nextLine();
             String saveFile = line.isEmpty() ? DEFAULT_SAVE_FILE : line;
 
-            generateKey(name, Integer.parseInt(keySize), saveFile);
+            generateSecretKey(name, Integer.parseInt(keySize), saveFile);
         }
     }
 
-    private static void generateKey(String name, int keySize, String saveFile) throws Exception {
+    private static void generateSecretKey(String name, int keySize, String saveFile) throws Exception {
         System.out.println("Generating secret key...");
         saveFile = saveFile + ".secret";
         KeyGenerator keyGenerator = KeyGenerator.getInstance(name);
