@@ -54,7 +54,6 @@ public class SymmetricKeyGenerator {
         KeyGenerator keyGenerator = KeyGenerator.getInstance(name);
         keyGenerator.init(keySize);
         SecretKey secretKey = keyGenerator.generateKey();
-        System.out.println(Utils.removeLeadingZero(secretKey.getEncoded()).length);
         Map<ParamType, String[]> params = new TreeMap<>();
         params.put(ParamType.DESCRIPTION, new String[]{"Secret key"});
         params.put(ParamType.METHOD, new String[]{name});

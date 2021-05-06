@@ -1,19 +1,13 @@
 package hr.fer.zemris.nos.crypto;
 
+import hr.fer.zemris.nos.crypto.Utils.KeyData;
+
 import javax.crypto.Cipher;
-import javax.crypto.SecretKey;
 import javax.crypto.spec.IvParameterSpec;
-import javax.crypto.spec.SecretKeySpec;
-import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.security.Key;
-import java.security.KeyFactory;
 import java.security.SecureRandom;
-import java.security.interfaces.RSAPrivateKey;
-import java.security.interfaces.RSAPublicKey;
-import java.security.spec.RSAPrivateKeySpec;
-import java.security.spec.RSAPublicKeySpec;
 import java.util.*;
 
 public class DigitalSealGenerator {
@@ -29,9 +23,9 @@ public class DigitalSealGenerator {
 
     public static void main(String[] args) throws Exception {
         // Prepare keys...
-        SecretKeyData senderSk = parseSecretKey();
-        RSAPublicKey receiverPub = parseRSAPublicKey();
-        RSAPrivateKey senderPriv = parseRSAPrivateKey();
+        KeyData senderSk = Utils.parseSecretKey(SENDER_SECRET_FILE);
+        KeyData receiverPub = Utils.parseRSAPublicKey(RECEIVER_PUB_FILE);
+        KeyData senderPriv = Utils.parseRSAPrivateKey(SENDER_PRIV_FILE);
 
         try (Scanner sc = new Scanner(System.in)) {
             // Read file and mode from console.
@@ -53,23 +47,17 @@ public class DigitalSealGenerator {
     }
 
     private static byte[] createEnvelope(
-            String file, SecretKeyData senderSk, String senderMode, RSAPublicKey receiverPub) throws Exception {
+            String file, KeyData senderSk, String senderMode, KeyData receiverPub) throws Exception {
         System.out.println("Creating envelope...");
-        byte[][] encryptionResults = encryptUsingSecretKey(Files.readAllBytes(Paths.get(file)), senderSk, senderMode);
-        byte[] envelopeData = encryptionResults[0];
-        byte[] iv = encryptionResults[1];
-        byte[] envelopeEncryptKey = encryptUsingPubPrivKey(senderSk.key, receiverPub);
+        byte[][] results = encryptUsingSecretKey(Files.readAllBytes(Paths.get(file)), senderSk.key, senderMode);
+        byte[] envelopeData = results[0];
+        byte[] iv = results[1];
+        byte[] envelopeEncryptKey = encryptUsingPubPrivKey(senderSk.key.getEncoded(), receiverPub.key);
         Map<ParamType, String[]> params = new TreeMap<>();
         params.put(ParamType.DESCRIPTION, new String[]{"Envelope"});
         params.put(ParamType.FILE_NAME, new String[]{file});
-        params.put(ParamType.METHOD, new String[]{
-                senderSk.algorithm,
-                receiverPub.getAlgorithm()
-        });
-        params.put(ParamType.KEY_LENGTH, new String[]{
-                senderSk.keyLength,
-                Utils.intToHex(Utils.removeLeadingZero(receiverPub.getModulus().toByteArray()).length * 8)
-        });
+        params.put(ParamType.METHOD, new String[]{senderSk.algorithm, receiverPub.algorithm});
+        params.put(ParamType.KEY_LENGTH, new String[]{senderSk.keyLength, receiverPub.keyLength});
         params.put(ParamType.MODE, new String[]{senderMode});
         if (iv != null) {
             params.put(ParamType.INITIALIZATION_VECTOR, new String[]{Utils.bytesToHex(iv)});
@@ -83,18 +71,14 @@ public class DigitalSealGenerator {
         return envelopeData;
     }
 
-    private static void createSignature(
-            byte[] data, String file, RSAPrivateKey senderPriv, HashAlg hash) throws Exception {
+    private static void createSignature(byte[] data, String file, KeyData senderPriv, HashAlg hash) throws Exception {
         System.out.println("Creating signature...");
-        byte[] signature = encryptUsingPubPrivKey(hash.digest(data), senderPriv);
+        byte[] signature = encryptUsingPubPrivKey(hash.digest(data), senderPriv.key);
         Map<ParamType, String[]> params = new TreeMap<>();
         params.put(ParamType.DESCRIPTION, new String[]{"Signature"});
         params.put(ParamType.FILE_NAME, new String[]{file});
-        params.put(ParamType.METHOD, new String[]{hash.getName(), senderPriv.getAlgorithm()});
-        params.put(ParamType.KEY_LENGTH, new String[]{
-                hash.getKeySizeHex(),
-                Utils.intToHex(Utils.removeLeadingZero(senderPriv.getModulus().toByteArray()).length * 8)
-        });
+        params.put(ParamType.METHOD, new String[]{hash.getName(), senderPriv.algorithm});
+        params.put(ParamType.KEY_LENGTH, new String[]{hash.getKeySizeHex(), senderPriv.keyLength});
         params.put(ParamType.SIGNATURE, new String[]{Utils.bytesToHex(signature)});
         String saveFile = "sender.signature";
         Utils.writeResults(Paths.get(saveFile), params);
@@ -102,17 +86,16 @@ public class DigitalSealGenerator {
         System.out.printf("Results are stored into '%s' file.%n", saveFile);
     }
 
-    private static byte[][] encryptUsingSecretKey(byte[] data, SecretKeyData senderSk, String mode) throws Exception {
+    private static byte[][] encryptUsingSecretKey(byte[] data, Key key, String mode) throws Exception {
         String padding = mode.equals("CTR") ? "NoPadding" : "PKCS5Padding";
-        Cipher cipher = Cipher.getInstance("%s/%s/%s".formatted(senderSk.algorithm, mode, padding));
-        SecretKey sk = new SecretKeySpec(senderSk.key, senderSk.algorithm);
+        Cipher cipher = Cipher.getInstance("%s/%s/%s".formatted(key.getAlgorithm(), mode, padding));
         byte[] iv = null;
         if (mode.equalsIgnoreCase("ecb")) {
-            cipher.init(Cipher.ENCRYPT_MODE, sk);
+            cipher.init(Cipher.ENCRYPT_MODE, key);
         } else {
             iv = new byte[cipher.getBlockSize()];
             new SecureRandom().nextBytes(iv);
-            cipher.init(Cipher.ENCRYPT_MODE, sk, new IvParameterSpec(iv));
+            cipher.init(Cipher.ENCRYPT_MODE, key, new IvParameterSpec(iv));
         }
         return new byte[][]{Base64.getEncoder().encode(cipher.doFinal(data)), iv};
     }
@@ -121,38 +104,6 @@ public class DigitalSealGenerator {
         Cipher cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding");
         cipher.init(Cipher.ENCRYPT_MODE, key);
         return Base64.getEncoder().encode(cipher.doFinal(data));
-    }
-
-    private static SecretKeyData parseSecretKey() throws Exception {
-        Map<ParamType, String[]> params = Utils.parseCryptoFile(SENDER_SECRET_FILE);
-        String algorithm = params.get(ParamType.METHOD)[0];
-        String keyLength = params.get(ParamType.KEY_LENGTH)[0];
-        String secretKeyHex = String.join("", params.get(ParamType.SECRET_KEY));
-        return new SecretKeyData(algorithm, keyLength, Utils.hexToBytes(secretKeyHex));
-    }
-
-    private static RSAPublicKey parseRSAPublicKey() throws Exception {
-        Map<ParamType, String[]> params = Utils.parseCryptoFile(RECEIVER_PUB_FILE);
-        String method = params.get(ParamType.METHOD)[0];
-        String modulus = String.join("", params.get(ParamType.MODULUS));
-        String publicExponent = params.get(ParamType.PUBLIC_EXPONENT)[0];
-        return (RSAPublicKey) KeyFactory.getInstance(method).generatePublic(new RSAPublicKeySpec(
-                new BigInteger(modulus, 16),
-                new BigInteger(publicExponent, 16)
-        ));
-    }
-
-    private static RSAKeyData parseRSAPrivateKey() throws Exception {
-        Map<ParamType, String[]> params = Utils.parseCryptoFile(SENDER_PRIV_FILE);
-        String algorithm = params.get(ParamType.METHOD)[0];
-        String keyLength = params.get(ParamType.KEY_LENGTH)[0];
-        String modulus = String.join("", params.get(ParamType.MODULUS));
-        String privateExponent = String.join("", params.get(ParamType.PRIVATE_EXPONENT));
-        Key key = KeyFactory.getInstance(algorithm).generatePrivate(new RSAPrivateKeySpec(
-                new BigInteger(modulus, 16),
-                new BigInteger(privateExponent, 16)
-        ));
-        return new RSAKeyData(keyLength, key);
     }
 
     private static String consoleFileName(Scanner sc) {
@@ -191,29 +142,6 @@ public class DigitalSealGenerator {
             System.exit(-1);
         }
         return new HashAlg("SHA3", Integer.parseInt(hashKeyLength));
-    }
-
-    private static class SecretKeyData {
-        private final String algorithm;
-        private final String keyLength;
-        private final byte[] key;
-
-        private SecretKeyData(String algorithm, String keyLength, byte[] key) {
-            this.algorithm = algorithm;
-            this.keyLength = keyLength;
-            this.key = key;
-        }
-    }
-
-    private static class RSAKeyData {
-        private final String algorithm = "RSA";
-        private final String keyLength;
-        private final Key key;
-
-        private RSAKeyData(String keyLength, Key key) {
-            this.keyLength = keyLength;
-            this.key = key;
-        }
     }
 
 }

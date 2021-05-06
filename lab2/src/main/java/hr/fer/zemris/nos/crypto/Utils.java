@@ -1,12 +1,21 @@
 package hr.fer.zemris.nos.crypto;
 
+import javax.crypto.spec.SecretKeySpec;
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.*;
+import java.security.Key;
+import java.security.KeyFactory;
+import java.security.spec.RSAPrivateKeySpec;
+import java.security.spec.RSAPublicKeySpec;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
 
 public class Utils {
 
@@ -30,14 +39,6 @@ public class Utils {
             bytes[i] = (byte) Integer.parseInt(hex.substring(j, j + 2), 16);
         }
         return bytes;
-    }
-
-    public static byte[] removeLeadingZero(byte[] bytes) {
-        if (bytes[0] == 0) {
-            return Arrays.copyOfRange(bytes, 1, bytes.length);
-        } else {
-            return bytes;
-        }
     }
 
     public static String intToHex(int i) {
@@ -97,6 +98,52 @@ public class Utils {
             throw new Exception(String.format("'%s' is invalid crypto file!%n%s", cryptoFile, e.getMessage()));
         }
         return params;
+    }
+
+    public static KeyData parseSecretKey(String file) throws Exception {
+        Map<ParamType, String[]> params = Utils.parseCryptoFile(file);
+        String algorithm = params.get(ParamType.METHOD)[0];
+        String keyLength = params.get(ParamType.KEY_LENGTH)[0];
+        String secretKeyHex = String.join("", params.get(ParamType.SECRET_KEY));
+        return new KeyData(keyLength, new SecretKeySpec(Utils.hexToBytes(secretKeyHex), algorithm));
+    }
+
+    public static KeyData parseRSAPublicKey(String file) throws Exception {
+        Map<ParamType, String[]> params = Utils.parseCryptoFile(file);
+        String algorithm = params.get(ParamType.METHOD)[0];
+        String keyLength = params.get(ParamType.KEY_LENGTH)[0];
+        String modulus = String.join("", params.get(ParamType.MODULUS));
+        String publicExponent = params.get(ParamType.PUBLIC_EXPONENT)[0];
+        Key key = KeyFactory.getInstance(algorithm).generatePublic(new RSAPublicKeySpec(
+                new BigInteger(modulus, 16),
+                new BigInteger(publicExponent, 16)
+        ));
+        return new KeyData(keyLength, key);
+    }
+
+    public static KeyData parseRSAPrivateKey(String file) throws Exception {
+        Map<ParamType, String[]> params = Utils.parseCryptoFile(file);
+        String algorithm = params.get(ParamType.METHOD)[0];
+        String keyLength = params.get(ParamType.KEY_LENGTH)[0];
+        String modulus = String.join("", params.get(ParamType.MODULUS));
+        String privateExponent = String.join("", params.get(ParamType.PRIVATE_EXPONENT));
+        Key key = KeyFactory.getInstance(algorithm).generatePrivate(new RSAPrivateKeySpec(
+                new BigInteger(modulus, 16),
+                new BigInteger(privateExponent, 16)
+        ));
+        return new KeyData(keyLength, key);
+    }
+
+    public static class KeyData {
+        public final String algorithm;
+        public final String keyLength;
+        public final Key key;
+
+        private KeyData(String keyLength, Key key) {
+            this.algorithm = key.getAlgorithm();
+            this.keyLength = keyLength;
+            this.key = key;
+        }
     }
 
 }
