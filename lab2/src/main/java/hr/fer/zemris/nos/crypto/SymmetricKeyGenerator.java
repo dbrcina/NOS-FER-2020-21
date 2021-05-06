@@ -20,11 +20,9 @@ public class SymmetricKeyGenerator {
             "AES", "128",
             "DESEDE", "168"
     );
-    private static final String DEFAULT_SAVE_FILE = "alice";
 
     public static void main(String[] args) throws Exception {
         try (Scanner sc = new Scanner(System.in)) {
-            // Parse symmetric algorithm's name.
             System.out.printf(
                     "Choose symmetric algorithm [%s] or press enter for '%s': ",
                     String.join(",", SYMMETRIC_ALGORITHMS), DEFAULT_SYMMETRIC_ALGORITHM
@@ -36,7 +34,6 @@ public class SymmetricKeyGenerator {
                 System.exit(-1);
             }
 
-            // Parse symmetric algorithm's key size.
             System.out.printf(
                     "Choose key size [%s] or press enter for '%s': ",
                     String.join(",", SECRET_KEY_SIZES.get(name)), DEFAULT_SECRET_KEY_SIZES.get(name));
@@ -47,21 +44,17 @@ public class SymmetricKeyGenerator {
                 System.exit(-1);
             }
 
-            // Parse save file.
-            System.out.printf("Enter save file or press enter for '%s': ", DEFAULT_SAVE_FILE);
-            line = sc.nextLine();
-            String saveFile = line.isEmpty() ? DEFAULT_SAVE_FILE : line;
-
-            generateSecretKey(name, Integer.parseInt(keySize), saveFile);
+            generateSecretKey(name, Integer.parseInt(keySize));
         }
     }
 
-    private static void generateSecretKey(String name, int keySize, String saveFile) throws Exception {
+    private static void generateSecretKey(String name, int keySize) throws Exception {
         System.out.println("Generating secret key...");
-        saveFile = saveFile + ".secret";
+        String saveFile = "sender.secret";
         KeyGenerator keyGenerator = KeyGenerator.getInstance(name);
         keyGenerator.init(keySize);
         SecretKey secretKey = keyGenerator.generateKey();
+        System.out.println(Utils.removeLeadingZero(secretKey.getEncoded()).length);
         Map<ParamType, String[]> params = new TreeMap<>();
         params.put(ParamType.DESCRIPTION, new String[]{"Secret key"});
         params.put(ParamType.METHOD, new String[]{name});

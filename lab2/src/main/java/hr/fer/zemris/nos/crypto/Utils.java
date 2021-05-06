@@ -6,10 +6,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 public class Utils {
 
@@ -25,6 +22,22 @@ public class Utils {
             hexChars[j * 2 + 1] = HEX_ARRAY[v & 0x0F];
         }
         return new String(hexChars, StandardCharsets.US_ASCII);
+    }
+
+    public static byte[] hexToBytes(String hex) {
+        byte[] bytes = new byte[hex.length() / 2];
+        for (int i = 0, j = 0; i < bytes.length; i++, j += 2) {
+            bytes[i] = (byte) Integer.parseInt(hex.substring(j, j + 2), 16);
+        }
+        return bytes;
+    }
+
+    public static byte[] removeLeadingZero(byte[] bytes) {
+        if (bytes[0] == 0) {
+            return Arrays.copyOfRange(bytes, 1, bytes.length);
+        } else {
+            return bytes;
+        }
     }
 
     public static String intToHex(int i) {

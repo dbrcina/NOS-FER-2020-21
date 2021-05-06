@@ -14,28 +14,13 @@ public class RSAKeyGenerator {
 
     private static final String[] RSA_KEY_SIZES = {"1024", "2048", "3072", "4096"};
     private static final String DEFAULT_RSA_KEY_SIZE = "2048";
-    private static final String DEFAULT_SAVE_FILE = "alice";
 
     public static void main(String[] args) throws Exception {
         try (Scanner sc = new Scanner(System.in)) {
-            // Parse key size.
-            System.out.printf(
-                    "Choose RSA key size [%s] or press enter for '%s': ",
-                    String.join(",", RSA_KEY_SIZES), DEFAULT_RSA_KEY_SIZE
-            );
-            String line = sc.nextLine();
-            String keySize = line.isEmpty() ? DEFAULT_RSA_KEY_SIZE : line;
-            if (Arrays.stream(RSA_KEY_SIZES).noneMatch(size -> size.equals(keySize))) {
-                System.out.printf("'%s' is invalid key size! Exiting...%n", keySize);
-                System.exit(-1);
-            }
-
-            // Parse save file.
-            System.out.printf("Enter save file or press enter for '%s': ", DEFAULT_SAVE_FILE);
-            line = sc.nextLine();
-            String saveFile = line.isEmpty() ? DEFAULT_SAVE_FILE : line;
-
-            generateRSAKeys(Integer.parseInt(keySize), saveFile);
+            String senderKeySize = consoleRSAKeyLength(sc, "sender");
+            String receiverKeySize = consoleRSAKeyLength(sc, "receiver");
+            generateRSAKeys(Integer.parseInt(senderKeySize), "sender");
+            generateRSAKeys(Integer.parseInt(receiverKeySize), "receiver");
         }
     }
 
@@ -65,6 +50,20 @@ public class RSAKeyGenerator {
         params.put(isPublic ? ParamType.PUBLIC_EXPONENT : ParamType.PRIVATE_EXPONENT, new String[]{exp});
         Utils.writeResults(Paths.get(saveFile), params);
         System.out.printf("\t%s has been generated and stored into '%s' file.%n", description, saveFile);
+    }
+
+    private static String consoleRSAKeyLength(Scanner sc, String who) {
+        System.out.printf(
+                "Choose %s's RSA key size [%s] or press enter for '%s': ",
+                who, String.join(",", RSA_KEY_SIZES), DEFAULT_RSA_KEY_SIZE
+        );
+        String line = sc.nextLine();
+        String keySize = line.isEmpty() ? DEFAULT_RSA_KEY_SIZE : line;
+        if (Arrays.stream(RSA_KEY_SIZES).noneMatch(size -> size.equals(keySize))) {
+            System.out.printf("'%s' is invalid key size! Exiting...%n", keySize);
+            System.exit(-1);
+        }
+        return keySize;
     }
 
 }
