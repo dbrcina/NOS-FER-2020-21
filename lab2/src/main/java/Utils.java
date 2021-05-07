@@ -30,7 +30,11 @@ public class Utils {
             hexChars[j * 2] = HEX_ARRAY[v >>> 4];
             hexChars[j * 2 + 1] = HEX_ARRAY[v & 0x0F];
         }
-        return new String(hexChars, StandardCharsets.US_ASCII);
+        String hex = new String(hexChars, StandardCharsets.US_ASCII);
+        if (hex.length() % 2 != 0) {
+            hex = "0".concat(hex);
+        }
+        return hex;
     }
 
     public static byte[] hexToBytes(String hex) {
@@ -47,6 +51,17 @@ public class Utils {
             hex = "0".concat(hex);
         }
         return hex;
+    }
+
+    public static byte[] flatten(byte[][] matrix) {
+        byte[] flatten = new byte[matrix.length * matrix[0].length];
+        int index = 0;
+        for (byte[] bytes : matrix) {
+            for (byte b : bytes) {
+                flatten[index++] = b;
+            }
+        }
+        return flatten;
     }
 
     public static void writeResults(Path file, Map<ParamType, String[]> params) throws IOException {

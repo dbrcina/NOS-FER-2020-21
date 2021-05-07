@@ -38,7 +38,7 @@ public class DigitalSealUnWrapper {
         System.out.println("------------------------------");
 
         System.out.println("Verifying envelope's signature...");
-        boolean verify = verifySignature(envelopeData, senderPub);
+        boolean verify = verifySignature(new byte[][]{envelopeData, envelopeCryptKey}, senderPub);
         System.out.printf("Verification done. Signature is %s!%n", verify ? "valid" : "invalid");
         System.out.println("------------------------------");
 
@@ -57,12 +57,12 @@ public class DigitalSealUnWrapper {
         );
     }
 
-    private static boolean verifySignature(byte[] data, KeyData senderPub) throws Exception {
+    private static boolean verifySignature(byte[][] data, KeyData senderPub) throws Exception {
         Map<ParamType, String[]> params = Utils.parseCryptoFile(SENDER_SIGNATURE_FILE);
         String hashName = params.get(ParamType.METHOD)[0];
         String hashKeyLengthHex = params.get(ParamType.KEY_LENGTH)[0];
         HashAlg hash = new HashAlg(hashName, Integer.parseInt(hashKeyLengthHex, 16));
-        byte[] hashedData = hash.digest(data);
+        byte[] hashedData = hash.digest(Utils.flatten(data));
         String signatureHex = String.join("", params.get(ParamType.SIGNATURE));
         byte[] signature = Utils.hexToBytes(signatureHex);
         byte[] decryptedSignature = decryptUsingPrivPubKey(signature, senderPub);

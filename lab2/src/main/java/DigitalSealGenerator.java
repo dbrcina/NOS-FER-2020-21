@@ -34,7 +34,7 @@ public class DigitalSealGenerator {
 
             // Create envelope.
             System.out.println("--------------------------------");
-            byte[] envelopeData = createEnvelope(file, senderSk, senderMode, receiverPub);
+            byte[][] envelope = createEnvelope(file, senderSk, senderMode, receiverPub);
             System.out.println("--------------------------------");
 
             // Make hash algorithm.
@@ -42,11 +42,11 @@ public class DigitalSealGenerator {
 
             // Create signature.
             System.out.println("--------------------------------");
-            createSignature(envelopeData, file, senderPriv, hash);
+            createSignature(envelope, file, senderPriv, hash);
         }
     }
 
-    private static byte[] createEnvelope(
+    private static byte[][] createEnvelope(
             String file, KeyData senderSk, String senderMode, KeyData receiverPub) throws Exception {
         System.out.println("Creating envelope...");
         byte[][] results = encryptUsingSecretKey(Files.readAllBytes(Paths.get(file)), senderSk.key, senderMode);
@@ -68,12 +68,12 @@ public class DigitalSealGenerator {
         Utils.writeResults(Paths.get(saveFile), params);
         System.out.println("Envelope is successfully created!");
         System.out.printf("Results are stored into '%s'.%n", saveFile);
-        return envelopeData;
+        return new byte[][]{envelopeData, envelopeEncryptKey};
     }
 
-    private static void createSignature(byte[] data, String file, KeyData senderPriv, HashAlg hash) throws Exception {
+    private static void createSignature(byte[][] data, String file, KeyData senderPriv, HashAlg hash) throws Exception {
         System.out.println("Creating signature...");
-        byte[] signature = encryptUsingPubPrivKey(hash.digest(data), senderPriv.key);
+        byte[] signature = encryptUsingPubPrivKey(hash.digest(Utils.flatten(data)), senderPriv.key);
         Map<ParamType, String[]> params = new TreeMap<>();
         params.put(ParamType.DESCRIPTION, new String[]{"Signature"});
         params.put(ParamType.FILE_NAME, new String[]{file});
