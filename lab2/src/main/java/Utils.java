@@ -1,5 +1,3 @@
-package hr.fer.zemris.nos.crypto;
-
 import javax.crypto.spec.SecretKeySpec;
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -147,18 +145,6 @@ public class Utils {
                 new BigInteger(privateExponent, 16)
         ));
         return new KeyData(keyLength, key);
-    }
-
-    public static class KeyData {
-        public final String algorithm;
-        public final String keyLength;
-        public final Key key;
-
-        private KeyData(String keyLength, Key key) {
-            this.algorithm = key.getAlgorithm();
-            this.keyLength = keyLength;
-            this.key = key;
-        }
     }
 
 }

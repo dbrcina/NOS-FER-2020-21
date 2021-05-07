@@ -1,7 +1,3 @@
-package hr.fer.zemris.nos.crypto;
-
-import hr.fer.zemris.nos.crypto.Utils.KeyData;
-
 import javax.crypto.Cipher;
 import javax.crypto.spec.IvParameterSpec;
 import java.nio.file.Files;

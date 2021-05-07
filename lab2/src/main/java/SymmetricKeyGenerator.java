@@ -1,5 +1,3 @@
-package hr.fer.zemris.nos.crypto;
-
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
 import java.nio.file.Paths;

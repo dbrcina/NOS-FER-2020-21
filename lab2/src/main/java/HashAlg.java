@@ -1,5 +1,3 @@
-package hr.fer.zemris.nos.crypto;
-
 import java.security.MessageDigest;
 
 public class HashAlg {

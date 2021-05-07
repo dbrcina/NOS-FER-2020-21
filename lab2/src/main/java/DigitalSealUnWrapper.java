@@ -1,7 +1,3 @@
-package hr.fer.zemris.nos.crypto;
-
-import hr.fer.zemris.nos.crypto.Utils.KeyData;
-
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.IvParameterSpec;
@@ -48,7 +44,8 @@ public class DigitalSealUnWrapper {
         String decryptedFile = "receiver.decrypted";
         Path decryptedFilePath = Paths.get(decryptedFile);
         Files.write(decryptedFilePath, decryptedEnvelopeData);
-        System.out.printf("Decryption successful. Results are stored into '%s'!%n", decryptedFile);
+        System.out.println("Decryption successful!");
+        System.out.printf("Results are stored into '%s'.%n", decryptedFile);
         System.out.println("------------------------------");
 
         System.out.printf(
