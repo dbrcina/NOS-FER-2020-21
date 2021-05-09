@@ -50,7 +50,7 @@ public class DigitalSealUnWrapper {
 
         System.out.printf(
                 "Are real('%s') and decrypted('%s') files equal? %s!%n",
-                realFile, decryptedFile, Files.readAllLines(realFilePath).equals(Files.readAllLines(decryptedFilePath))
+                realFile, decryptedFile, Arrays.equals(Files.readAllBytes(realFilePath), Files.readAllBytes(decryptedFilePath))
         );
     }
 
